@@ -1,4 +1,15 @@
 # Changelog
+[Ejercicio 06]
+- Interfaz de consola en ui/console.py con el menú principal y un menú de
+  CRUD por cada entidad (listar, nuevo, modificar y borrar).
+- Funciones para leer texto, enteros, decimales y fechas por teclado, que
+  no dejan seguir hasta que el dato es válido.
+- Decorador para las opciones del menú, que muestra el error de los
+  servicios en pantalla en lugar de cortar el programa.
+- Menú de reportes: cotización de un libro, cotización del catálogo,
+  comparación con la competencia, histórico de un tipo de dólar y libros
+  con stock bajo.
+
 [Ejercicio 05]
 - Creación de los archivos csv con los datos iniciales de cada entidad en
   la carpeta migrations/csv (mínimo 10 registros por clase).
