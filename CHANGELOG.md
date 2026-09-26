@@ -1,4 +1,10 @@
 # Changelog
+[Ejercicio 04]
+- Definición de las clases de servicio con la lógica de cada entidad.
+- Validaciones antes de guardar (datos repetidos, ISBN, precios y stock).
+- Control para no borrar registros que están en uso.
+- Cálculo de precios en ARS/USD según el tipo de dólar y reportes.
+
 [Ejercicio 03]
 - Definición de las clases de persistencia con CRUD completo para cada entidad.
 
