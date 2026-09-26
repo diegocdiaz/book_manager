@@ -1,4 +1,6 @@
 # Changelog
+[Ejercicio 03]
+- Definición de las clases de persistencia con CRUD completo para cada entidad.
 
 [Ejercicio 02]
 - Definición de las clases entidad: EntidadBase, Genero, Editorial, Moneda,
