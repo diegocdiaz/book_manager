@@ -1,4 +1,11 @@
 # Changelog
+[Ejercicio 07]
+- Creación de main.py, que arma los servicios y abre la interfaz de consola.
+- Parámetro import_default_data para volver a importar los datos de
+  migrations/csv cuando se lo pide.
+- Si todavía no hay datos guardados se hace la carga inicial sola, porque la
+  carpeta data/ no se versiona y en un clon nuevo no existe.
+
 [Ejercicio 06]
 - Interfaz de consola en ui/console.py con el menú principal y un menú de
   CRUD por cada entidad (listar, nuevo, modificar y borrar).
