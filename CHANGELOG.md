@@ -1,4 +1,10 @@
 # Changelog
+[Ejercicio 05]
+- Creación de los archivos csv con los datos iniciales de cada entidad en
+  la carpeta migrations/csv (mínimo 10 registros por clase).
+- Carga de los datos iniciales en preload_data.py.
+- Se quitan de los servicios métodos que no se usaban.
+
 [Ejercicio 04]
 - Definición de las clases de servicio con la lógica de cada entidad.
 - Validaciones antes de guardar (datos repetidos, ISBN, precios y stock).

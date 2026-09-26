@@ -257,22 +257,6 @@ class ServicioLibro(ServicioBase):
             return isbn
         raise ValueError('El ISBN tiene que tener 10 o 13 digitos.')
 
-    def obtener_por_isbn(self, isbn: str) -> Libro:
-        """Busca un libro por ISBN."""
-        libro = self._repositorio.leer_por_isbn(self.limpiar_isbn(isbn))
-        if libro is None:
-            raise ValueError(f'No existe un libro con ISBN {isbn}.')
-        return libro
-
-    def buscar(self, texto: str) -> List[Libro]:
-        """Busca libros por parte del titulo o del autor."""
-        texto = texto.lower()
-        encontrados = []
-        for libro in self.listar():
-            if texto in libro.titulo.lower() or texto in libro.autor.lower():
-                encontrados.append(libro)
-        return encontrados
-
     def crear(self, isbn: str, titulo: str, autor: str,
               editorial_id: int, genero_id: int) -> Libro:
         """Da de alta un libro. El ISBN no se puede repetir."""
@@ -325,11 +309,6 @@ class ServicioPrecio(ServicioBase):
         super().__init__(repositorio)
         self._servicio_libro = servicio_libro
         self._servicio_moneda = servicio_moneda
-
-    def listar_por_libro(self, libro_id: int) -> List[Precio]:
-        """Devuelve los precios de un libro."""
-        self._servicio_libro.obtener(libro_id)
-        return self._repositorio.leer_por_libro(libro_id)
 
     def buscar_precio(self, libro_id: int, codigo: str) -> Optional[Precio]:
         """Devuelve el precio del libro en esa moneda o None si no tiene."""
@@ -396,32 +375,10 @@ class ServicioStock:
         stock.cantidad = cantidad
         return self._repositorio.actualizar(stock)
 
-    def ingresar(self, libro_id: int, cantidad: int) -> Stock:
-        """Suma unidades cuando llegan libros."""
-        if cantidad <= 0:
-            raise ValueError('La cantidad tiene que ser mayor a 0.')
-        stock = self.obtener(libro_id)
-        return self.actualizar(libro_id, stock.cantidad + cantidad)
-
-    def egresar(self, libro_id: int, cantidad: int) -> Stock:
-        """Resta unidades cuando se vende."""
-        if cantidad <= 0:
-            raise ValueError('La cantidad tiene que ser mayor a 0.')
-        stock = self.obtener(libro_id)
-        if cantidad > stock.cantidad:
-            raise ValueError(f'No hay stock suficiente de '
-                             f'{stock.libro.titulo}, quedan '
-                             f'{stock.cantidad}.')
-        return self.actualizar(libro_id, stock.cantidad - cantidad)
-
     def eliminar(self, libro_id: int) -> bool:
         """Borra el stock de un libro."""
         self.obtener(libro_id)
         return self._repositorio.eliminar(libro_id)
-
-    def bajo_stock(self, minimo: int = 5) -> List[Stock]:
-        """Libros que tienen `minimo` unidades o menos."""
-        return [s for s in self.listar() if s.cantidad <= minimo]
 
 
 class ServicioCotizacionDolar:
@@ -487,13 +444,6 @@ class ServicioCotizacionDolar:
         self.obtener(tipo_id, fecha)
         return self._repositorio.eliminar(tipo_id, fecha)
 
-    def variacion(self, tipo_id: int, desde: datetime.date,
-                  hasta: datetime.date) -> float:
-        """Cuanto vario el dolar (venta) entre dos fechas, en %."""
-        inicio = self.obtener(tipo_id, desde).valor_venta
-        fin = self.obtener(tipo_id, hasta).valor_venta
-        return (fin - inicio) / inicio * 100
-
 
 class ServicioCotizador:
     """Calcula los precios de los libros en pesos y dolares.
@@ -505,14 +455,10 @@ class ServicioCotizador:
 
     def __init__(self, servicio_libro: ServicioLibro,
                  servicio_precio: ServicioPrecio,
-                 servicio_stock: ServicioStock,
-                 servicio_cotizacion: ServicioCotizacionDolar,
-                 servicio_tipo: ServicioTipoCotizacion) -> None:
+                 servicio_cotizacion: ServicioCotizacionDolar) -> None:
         self._servicio_libro = servicio_libro
         self._servicio_precio = servicio_precio
-        self._servicio_stock = servicio_stock
         self._servicio_cotizacion = servicio_cotizacion
-        self._servicio_tipo = servicio_tipo
 
     def cotizar_libro(self, libro_id: int, tipo_id: int) -> Dict:
         """Devuelve un diccionario con el precio del libro en ARS y USD."""
@@ -549,14 +495,6 @@ class ServicioCotizador:
                 pass  # si no tiene precio lo salteo
         return resultado
 
-    def comparar_tipos(self, libro_id: int) -> List[Dict]:
-        """Cotiza un libro con cada tipo de dolar que tenga datos."""
-        resultado = []
-        for tipo in self._servicio_tipo.listar():
-            if self._servicio_cotizacion.historico(tipo.id):
-                resultado.append(self.cotizar_libro(libro_id, tipo.id))
-        return resultado
-
     def comparar_competencia(self, libro_id: int, tipo_id: int,
                              precio_competencia: float,
                              competidor: str = 'Cuspide') -> Dict:
@@ -575,22 +513,6 @@ class ServicioCotizador:
             'porcentaje': round(diferencia / precio_competencia * 100, 2),
             'mas_barato': nuestro < precio_competencia,
         }
-
-    def inventario_valorizado(self, tipo_id: int) -> List[Dict]:
-        """Cuanto vale en pesos el stock de cada libro."""
-        resultado = []
-        for stock in self._servicio_stock.listar():
-            try:
-                precio = self.cotizar_libro(stock.libro.id, tipo_id)['ars']
-            except ValueError:
-                continue  # sin precio no se puede calcular
-            resultado.append({
-                'libro': stock.libro,
-                'cantidad': stock.cantidad,
-                'precio': precio,
-                'subtotal': round(stock.cantidad * precio, 2),
-            })
-        return resultado
 
 
 class ServiciosLibreria:
@@ -621,5 +543,4 @@ class ServiciosLibreria:
         self.cotizaciones = ServicioCotizacionDolar(repo_cotizacion,
                                                     self.tipos_cotizacion)
         self.cotizador = ServicioCotizador(self.libros, self.precios,
-                                           self.stock, self.cotizaciones,
-                                           self.tipos_cotizacion)
+                                           self.cotizaciones)

@@ -1,0 +1,15 @@
+id,isbn,titulo,autor,editorial_id,genero_id
+1,9789877694130,Distancia de rescate,Samanta Schweblin,1,1
+2,9788433998064,Las cosas que perdimos en el fuego,Mariana Enriquez,2,2
+3,9789504992752,76,Felipe Pigna,3,3
+4,9786313013401,Los días de la Constitución,Eduardo Sacheri,4,3
+5,9789877388534,La paciente silenciosa,Alex Michaelides,5,4
+6,9788425432026,El hombre en busca de sentido,Viktor E. Frankl,6,5
+7,9789507880223,Los cuatro acuerdos,Miguel Ruiz,7,6
+8,9789877693836,La vegetariana,Han Kang,1,1
+9,9789504991694,Murdle 1: resuelve un crimen,G. T. Karber,3,7
+10,9789504990437,Montoneros,María O'Donnell,3,3
+11,9786319114904,Lyna y Mandarina: una aventura en altamar,Lyna Vallejos,10,8
+12,9789878223988,La felicidad,Gabriel Rolón,8,5
+13,9789506446567,Antes de que se enfríe el café,Toshikazu Kawaguchi,9,1
+14,9789504992646,El último secreto,Dan Brown,3,4
