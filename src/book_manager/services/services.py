@@ -1,8 +1,8 @@
 """Servicios del sistema Book Manager.
 
 Aca va la logica de negocio: validaciones antes de guardar, controles para
-no borrar datos que se estan usando, movimientos de stock y los calculos
-de precios segun la cotizacion del dolar.
+no borrar datos que se estan usando y los calculos de precios segun la
+cotizacion del dolar.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 from book_manager.entities.entities import (
     CotizacionDolar,
     Editorial,
+    EntidadBase,
     Genero,
     Libro,
     Moneda,
@@ -24,6 +25,7 @@ from book_manager.entities.entities import (
 from book_manager.repositories.repositories import (
     DIRECTORIO_DATOS,
     RepositorioCotizacionDolar,
+    RepositorioCSV,
     RepositorioEditorial,
     RepositorioGenero,
     RepositorioLibro,
@@ -39,14 +41,14 @@ class ServicioBase:
 
     nombre_entidad = 'registro'
 
-    def __init__(self, repositorio) -> None:
+    def __init__(self, repositorio: RepositorioCSV) -> None:
         self._repositorio = repositorio
 
-    def listar(self) -> list:
+    def listar(self) -> List[EntidadBase]:
         """Devuelve todos los registros."""
         return self._repositorio.leer_todos()
 
-    def obtener(self, id_: int):
+    def obtener(self, id_: int) -> EntidadBase:
         """Busca por id. Si no existe lanza ValueError."""
         entidad = self._repositorio.leer_por_id(id_)
         if entidad is None:

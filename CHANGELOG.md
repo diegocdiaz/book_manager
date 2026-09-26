@@ -4,6 +4,7 @@
   la carpeta migrations/csv (mínimo 10 registros por clase).
 - Carga de los datos iniciales en preload_data.py.
 - Se quitan de los servicios métodos que no se usaban.
+- Corrección del docstring y los type hints de los servicios.
 
 [Ejercicio 04]
 - Definición de las clases de servicio con la lógica de cada entidad.
