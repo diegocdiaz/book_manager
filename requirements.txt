@@ -1,0 +1,7 @@
+# Este proyecto usa solamente la libreria estandar de Python, por eso no hay
+# dependencias para instalar con pip.
+#
+# Requiere Python 3.10 o superior: en ui/console.py se usa la sentencia match.
+#
+# Modulos estandar utilizados:
+#   abc, collections, csv, datetime, functools, pathlib, typing
