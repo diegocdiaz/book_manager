@@ -2,6 +2,11 @@
 
 ## Sprint 2
 
+[Ejercicio 03]
+- Context manager transaccion() en ConexionDB para manejar las
+  transacciones: hace commit si todo sale bien y rollback si hay un error.
+- La sesión se cierra siempre al terminar el bloque with.
+
 [Ejercicio 02]
 - Creación de la clase ConexionDB en database/connection.py, que maneja la
   conexión a la base PostgreSQL de Supabase con SQLAlchemy.

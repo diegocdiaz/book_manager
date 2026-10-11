@@ -8,7 +8,8 @@ variable de entorno DATABASE_URL.
 from __future__ import annotations
 
 import os
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -50,6 +51,31 @@ class ConexionDB:
     def obtener_sesion(self) -> Session:
         """Devuelve una sesión nueva para trabajar con la base."""
         return self._fabrica_sesiones()
+
+    @contextmanager
+    def transaccion(self) -> Iterator[Session]:
+        """Context manager para trabajar dentro de una transacción.
+
+        Si el bloque with termina bien se hace commit. Si hay un error se
+        hace rollback, así no queda nada guardado a medias, y el error se
+        vuelve a lanzar. En los dos casos la sesión se cierra al final.
+
+        Ejemplo:
+            with conexion.transaccion() as sesion:
+                sesion.add(objeto)
+
+        Yields:
+            Session: La sesión para usar dentro del bloque with.
+        """
+        sesion = self.obtener_sesion()
+        try:
+            yield sesion
+            sesion.commit()
+        except Exception:
+            sesion.rollback()
+            raise
+        finally:
+            sesion.close()
 
     def probar_conexion(self) -> bool:
         """Hace una consulta simple para saber si la base responde.
