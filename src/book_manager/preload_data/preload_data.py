@@ -23,16 +23,23 @@ def leer_csv(nombre: str) -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def cargar_datos_iniciales(
-        directorio: Path = DIRECTORIO_DATOS) -> ServiciosLibreria:
-    """Borra los datos que haya y carga los de migrations/csv."""
-    # borro los datos viejos para no duplicar registros
+def borrar_datos_guardados(directorio: Path = DIRECTORIO_DATOS) -> None:
+    """Borra los csv guardados para que la precarga no duplique registros.
+
+    Hay que llamarla antes de armar los repositorios, porque cada repositorio
+    lee su archivo al crearse.
+    """
     if directorio.exists():
         for archivo in directorio.glob('*.csv'):
             archivo.unlink()
 
-    servicios = ServiciosLibreria(directorio)
 
+def cargar_datos_iniciales(servicios: ServiciosLibreria) -> None:
+    """Carga los datos de migrations/csv usando los servicios recibidos.
+
+    Los servicios tienen que estar armados sobre una carpeta de datos vacia
+    (ver borrar_datos_guardados).
+    """
     # como se arranca de cero, los ids que se generan son los mismos que
     # los del csv, por eso en libros, precios, etc. se usan directamente
     for fila in leer_csv('generos.csv'):
@@ -67,5 +74,3 @@ def cargar_datos_iniciales(
             float(fila['valor_compra']),
             float(fila['valor_venta']),
         )
-
-    return servicios

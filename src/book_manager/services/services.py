@@ -8,7 +8,6 @@ cotizacion del dolar.
 from __future__ import annotations
 
 import datetime
-from pathlib import Path
 from typing import Dict, List, Optional
 
 from book_manager.entities.entities import (
@@ -23,7 +22,6 @@ from book_manager.entities.entities import (
     TipoCotizacion,
 )
 from book_manager.repositories.repositories import (
-    DIRECTORIO_DATOS,
     RepositorioCotizacionDolar,
     RepositorioCSV,
     RepositorioEditorial,
@@ -518,31 +516,28 @@ class ServicioCotizador:
 
 
 class ServiciosLibreria:
-    """Arma todos los repositorios y servicios juntos.
+    """Agrupa todos los servicios en un solo objeto.
 
-    Asi desde la consola y el main se usa un solo objeto.
+    Asi la consola y la precarga reciben un unico parametro. Los servicios
+    llegan ya armados: la creacion de repositorios y servicios se hace en
+    main.py.
     """
 
-    def __init__(self, directorio: Path = DIRECTORIO_DATOS) -> None:
-        repo_genero = RepositorioGenero(directorio)
-        repo_editorial = RepositorioEditorial(directorio)
-        repo_moneda = RepositorioMoneda(directorio)
-        repo_tipo = RepositorioTipoCotizacion(directorio)
-        repo_libro = RepositorioLibro(repo_editorial, repo_genero, directorio)
-        repo_precio = RepositorioPrecio(repo_libro, repo_moneda, directorio)
-        repo_stock = RepositorioStock(repo_libro, directorio)
-        repo_cotizacion = RepositorioCotizacionDolar(repo_tipo, directorio)
-
-        self.generos = ServicioGenero(repo_genero, repo_libro)
-        self.editoriales = ServicioEditorial(repo_editorial, repo_libro)
-        self.monedas = ServicioMoneda(repo_moneda, repo_precio)
-        self.tipos_cotizacion = ServicioTipoCotizacion(repo_tipo,
-                                                       repo_cotizacion)
-        self.libros = ServicioLibro(repo_libro, self.editoriales,
-                                    self.generos, repo_precio, repo_stock)
-        self.precios = ServicioPrecio(repo_precio, self.libros, self.monedas)
-        self.stock = ServicioStock(repo_stock, self.libros)
-        self.cotizaciones = ServicioCotizacionDolar(repo_cotizacion,
-                                                    self.tipos_cotizacion)
-        self.cotizador = ServicioCotizador(self.libros, self.precios,
-                                           self.cotizaciones)
+    def __init__(self, generos: ServicioGenero,
+                 editoriales: ServicioEditorial,
+                 monedas: ServicioMoneda,
+                 tipos_cotizacion: ServicioTipoCotizacion,
+                 libros: ServicioLibro,
+                 precios: ServicioPrecio,
+                 stock: ServicioStock,
+                 cotizaciones: ServicioCotizacionDolar,
+                 cotizador: ServicioCotizador) -> None:
+        self.generos = generos
+        self.editoriales = editoriales
+        self.monedas = monedas
+        self.tipos_cotizacion = tipos_cotizacion
+        self.libros = libros
+        self.precios = precios
+        self.stock = stock
+        self.cotizaciones = cotizaciones
+        self.cotizador = cotizador
