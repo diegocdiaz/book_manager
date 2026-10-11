@@ -1,4 +1,16 @@
 # Changelog
+
+## Sprint 2
+
+[Ejercicio 01]
+- Creación de la rama Sprint_2 a partir de la rama Sprint_1.
+- Nuevas carpetas database/ y models/ con los archivos connection.py y
+  models.py, y la carpeta migrations/sql.
+- Creación del archivo .env con la configuración de la base de datos SQLite.
+- Actualización del README.md con el objetivo y el contexto del Sprint 2.
+
+## Sprint 1
+
 [Ejercicio 07]
 - Creación de main.py, que arma los servicios y abre la interfaz de consola.
 - Parámetro import_default_data para volver a importar los datos de
