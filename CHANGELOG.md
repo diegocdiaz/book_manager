@@ -2,6 +2,12 @@
 
 ## Sprint 2
 
+[Ejercicio 02]
+- Creación de la clase ConexionDB en database/connection.py, que maneja la
+  conexión a la base PostgreSQL de Supabase con SQLAlchemy.
+- La URL de conexión se lee de la variable de entorno DATABASE_URL.
+- Se agregan SQLAlchemy y psycopg2-binary a requirements.txt.
+
 [Ejercicio 01]
 - Creación de la rama Sprint_2 a partir de la rama Sprint_1.
 - Nuevas carpetas database/ y models/ con los archivos connection.py y
