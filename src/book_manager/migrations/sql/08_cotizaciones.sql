@@ -1,0 +1,24 @@
+-- Datos de la tabla cotizaciones (generado desde el CSV)
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (1, 1, '2026-09-21', 1485, 1535) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (2, 1, '2026-09-22', 1485, 1535) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (3, 1, '2026-09-23', 1485, 1535) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (4, 1, '2026-09-24', 1485, 1535) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (5, 1, '2026-09-25', 1490, 1540) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (6, 1, '2026-09-26', 1495, 1545) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (7, 2, '2026-09-21', 1530, 1550) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (8, 2, '2026-09-22', 1530, 1550) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (9, 2, '2026-09-23', 1535, 1555) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (10, 2, '2026-09-24', 1540, 1560) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (11, 2, '2026-09-25', 1540, 1560) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (12, 2, '2026-09-26', 1540, 1560) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (13, 3, '2026-09-21', 1530.2, 1540.1) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (14, 3, '2026-09-22', 1531.6, 1536.5) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (15, 3, '2026-09-23', 1530.4, 1536.6) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (16, 3, '2026-09-24', 1537.6, 1542.9) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (17, 3, '2026-09-25', 1539, 1545.6) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (18, 3, '2026-09-26', 1544.3, 1557.3) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (19, 4, '2026-09-26', 1615.3, 1616.6) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (20, 5, '2026-09-25', 1516.5, 1525.5) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (21, 6, '2026-09-26', 1609.93, 1612.75) ON CONFLICT (id) DO NOTHING;
+INSERT INTO cotizaciones (id, tipo_id, fecha, valor_compra, valor_venta) VALUES (22, 7, '2026-09-25', 1943.5, 2008.5) ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('cotizaciones', 'id'), COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM cotizaciones;

@@ -2,6 +2,12 @@
 
 ## Sprint 2
 
+### [Ejercicio 05]
+- Migración de los datos de los CSV a la base de datos con la función migrar_datos en migrations/migrations.py.
+- Generación de un archivo .sql con los INSERT de cada tabla en migrations/sql.
+- Carga respetando el orden de las claves foráneas, sin duplicar registros si se ejecuta más de una vez.
+- Ajuste de las secuencias de id de PostgreSQL luego de la carga.
+
 ### [Ejercicio 04]
 - Definición de las tablas del sistema con sus tipos de datos y relaciones en models/models.py.
 - Restricciones para que precios, stock y cotizaciones no admitan valores negativos.
