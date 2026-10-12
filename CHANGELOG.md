@@ -2,6 +2,14 @@
 
 ## Sprint 2
 
+
+### [Ejercicio 06]
+- Los repositorios pasan a guardar los datos en la base de datos con SQLAlchemy en lugar de archivos CSV.
+- Repositorio genérico RepositorioDB que convierte los modelos de tabla en entidades y usa el context manager transaccion() en cada operación.
+- Se mantienen los mismos métodos de los repositorios, así los servicios y la consola no cambian.
+- main.py arma los repositorios con ConexionDB y, si la base está vacía, migra los datos de migrations/csv.
+- La carga inicial de preload_data.py usa la función migrar_datos.
+
 ### [Ejercicio 05]
 - Migración de los datos de los CSV a la base de datos con la función migrar_datos en migrations/migrations.py.
 - Generación de un archivo .sql con los INSERT de cada tabla en migrations/sql.

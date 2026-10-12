@@ -23,7 +23,7 @@ from book_manager.entities.entities import (
 )
 from book_manager.repositories.repositories import (
     RepositorioCotizacionDolar,
-    RepositorioCSV,
+    RepositorioDB,
     RepositorioEditorial,
     RepositorioGenero,
     RepositorioLibro,
@@ -39,7 +39,7 @@ class ServicioBase:
 
     nombre_entidad = 'registro'
 
-    def __init__(self, repositorio: RepositorioCSV) -> None:
+    def __init__(self, repositorio: RepositorioDB) -> None:
         self._repositorio = repositorio
 
     def listar(self) -> List[EntidadBase]:

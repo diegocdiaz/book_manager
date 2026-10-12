@@ -1,19 +1,20 @@
 """Punto de entrada del sistema Book Manager.
 
-Se encarga de armar los repositorios y los servicios, resolver de dónde
-salen los datos y abrir la interfaz de consola.
+Se encarga de abrir la conexión a la base de datos, armar los repositorios
+y los servicios, resolver con qué datos se arranca y abrir la interfaz de
+consola.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Optional
 
-from book_manager.preload_data.preload_data import (
-    borrar_datos_guardados,
-    cargar_datos_iniciales,
-)
+from sqlalchemy import func, inspect, select
+
+from book_manager.database.connection import ConexionDB
+from book_manager.models.models import LibroModelo
+from book_manager.preload_data.preload_data import cargar_datos_iniciales
 from book_manager.repositories.repositories import (
-    DIRECTORIO_DATOS,
     RepositorioCotizacionDolar,
     RepositorioEditorial,
     RepositorioGenero,
@@ -38,39 +39,39 @@ from book_manager.services.services import (
 from book_manager.ui.console import ConsolaLibreria
 
 
-def hay_datos(directorio: Path) -> bool:
-    """Dice si en el directorio ya hay datos guardados.
+def hay_datos(conexion: ConexionDB) -> bool:
+    """Dice si la base ya tiene las tablas creadas y libros cargados.
 
     Args:
-        directorio (Path): Carpeta donde se persisten los csv.
+        conexion (ConexionDB): Conexión a la base de datos.
 
     Returns:
-        bool: True si hay al menos un archivo csv guardado.
+        bool: True si la tabla libros existe y tiene al menos un registro.
     """
-    return directorio.exists() and any(directorio.glob('*.csv'))
+    if not inspect(conexion.engine).has_table(LibroModelo.__tablename__):
+        return False
+    with conexion.transaccion() as sesion:
+        return bool(sesion.scalar(select(func.count(LibroModelo.id))))
 
 
-def armar_servicios(directorio: Path = DIRECTORIO_DATOS) -> ServiciosLibreria:
-    """Crea los repositorios y les inyecta a los servicios lo que necesitan.
-
-    Los repositorios que dependen de otros (libro, precio, stock y
-    cotización) reciben los que ya se crearon, así todos comparten los
-    mismos objetos en memoria.
+def armar_servicios(conexion: ConexionDB) -> ServiciosLibreria:
+    """Crea los repositorios sobre la base y les inyecta los servicios.
 
     Args:
-        directorio (Path): Carpeta donde se persisten los csv.
+        conexion (ConexionDB): Conexión a la base de datos que comparten
+            todos los repositorios.
 
     Returns:
         ServiciosLibreria: Los servicios listos para usar.
     """
-    repo_genero = RepositorioGenero(directorio)
-    repo_editorial = RepositorioEditorial(directorio)
-    repo_moneda = RepositorioMoneda(directorio)
-    repo_tipo = RepositorioTipoCotizacion(directorio)
-    repo_libro = RepositorioLibro(repo_editorial, repo_genero, directorio)
-    repo_precio = RepositorioPrecio(repo_libro, repo_moneda, directorio)
-    repo_stock = RepositorioStock(repo_libro, directorio)
-    repo_cotizacion = RepositorioCotizacionDolar(repo_tipo, directorio)
+    repo_genero = RepositorioGenero(conexion)
+    repo_editorial = RepositorioEditorial(conexion)
+    repo_moneda = RepositorioMoneda(conexion)
+    repo_tipo = RepositorioTipoCotizacion(conexion)
+    repo_libro = RepositorioLibro(conexion)
+    repo_precio = RepositorioPrecio(conexion)
+    repo_stock = RepositorioStock(conexion)
+    repo_cotizacion = RepositorioCotizacionDolar(conexion)
 
     generos = ServicioGenero(repo_genero, repo_libro)
     editoriales = ServicioEditorial(repo_editorial, repo_libro)
@@ -89,48 +90,45 @@ def armar_servicios(directorio: Path = DIRECTORIO_DATOS) -> ServiciosLibreria:
 
 def preparar_servicios(
         import_default_data: bool = False,
-        directorio: Path = DIRECTORIO_DATOS) -> ServiciosLibreria:
+        conexion: Optional[ConexionDB] = None) -> ServiciosLibreria:
     """Arma los servicios y decide con qué datos se arranca.
 
     Args:
-        import_default_data (bool): Si es True se vuelven a importar los
-            datos de migrations/csv, borrando lo que hubiera guardado. Si es
-            False se usan los datos que ya están persistidos, salvo que no
-            haya ninguno.
-        directorio (Path): Carpeta donde se persisten los csv.
+        import_default_data (bool): Si es True se vuelven a migrar los datos
+            de migrations/csv a la base. Si es False se usan los datos que
+            ya están en la base, salvo que esté vacía.
+        conexion (Optional[ConexionDB]): Conexión a usar. Si no se indica,
+            se crea una con la variable de entorno DATABASE_URL.
 
     Returns:
         ServiciosLibreria: Los servicios listos para usar.
     """
+    conexion = conexion or ConexionDB()
     if import_default_data:
-        print('Se importan de nuevo los datos de migrations/csv...')
-    elif not hay_datos(directorio):
-        # la carpeta data/ está en el .gitignore, así que en un clon nuevo
-        # no existe. Se hace la carga inicial para no arrancar vacío.
-        print('No hay datos guardados, se cargan los de migrations/csv...')
+        print('Se migran de nuevo los datos de migrations/csv...')
+        cargar_datos_iniciales(conexion)
+    elif not hay_datos(conexion):
+        print('La base está vacía, se migran los datos de migrations/csv...')
+        cargar_datos_iniciales(conexion)
     else:
-        print('Se usan los datos que ya estaban guardados.')
-        return armar_servicios(directorio)
-
-    # se borra antes de armar los repositorios porque leen el csv al crearse
-    borrar_datos_guardados(directorio)
-    servicios = armar_servicios(directorio)
-    cargar_datos_iniciales(servicios)
-    return servicios
+        print('Se usan los datos que ya están en la base.')
+    return armar_servicios(conexion)
 
 
 def main(import_default_data: bool = False,
-         directorio: Path = DIRECTORIO_DATOS) -> None:
+         conexion: Optional[ConexionDB] = None) -> None:
     """Ejecuta el sistema de gestión de la librería.
 
     Args:
-        import_default_data (bool): Si es True se vuelven a importar los
+        import_default_data (bool): Si es True se vuelven a migrar los
             datos iniciales antes de abrir el menú.
-        directorio (Path): Carpeta donde se persisten los csv.
+        conexion (Optional[ConexionDB]): Conexión a usar. Si no se indica,
+            se crea una con la variable de entorno DATABASE_URL.
     """
-    servicios = preparar_servicios(import_default_data, directorio)
+    servicios = preparar_servicios(import_default_data, conexion)
     ConsolaLibreria(servicios).ejecutar()
 
 
 if __name__ == '__main__':
     main()
+

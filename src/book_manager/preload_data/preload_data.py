@@ -1,76 +1,26 @@
 """Carga de los datos iniciales desde la carpeta migrations/csv.
 
-Los datos se dan de alta con los servicios para que pasen por las mismas
-validaciones que cuando se cargan a mano.
+Desde el Sprint 2 los datos viven en la base de datos, así que la carga
+inicial es la migración de los CSV del Sprint 1 (ver migrations.py): genera
+los archivos .sql y carga las tablas sin duplicar registros.
 """
 
 from __future__ import annotations
 
-import csv
-import datetime
 from pathlib import Path
-from typing import Dict, List
 
-from book_manager.repositories.repositories import DIRECTORIO_DATOS
-from book_manager.services.services import ServiciosLibreria
+from book_manager.database.connection import ConexionDB
+from book_manager.migrations.migrations import migrar_datos
 
-CARPETA_CSV = Path(__file__).resolve().parent.parent / 'migrations' / 'csv'
-
-
-def leer_csv(nombre: str) -> List[Dict[str, str]]:
-    """Lee un archivo de migrations/csv y devuelve sus filas."""
-    with open(CARPETA_CSV / nombre, 'r', encoding='utf-8', newline='') as f:
-        return list(csv.DictReader(f))
+CARPETA_MIGRACIONES = Path(__file__).resolve().parent.parent / 'migrations'
+CARPETA_CSV = CARPETA_MIGRACIONES / 'csv'
+CARPETA_SQL = CARPETA_MIGRACIONES / 'sql'
 
 
-def borrar_datos_guardados(directorio: Path = DIRECTORIO_DATOS) -> None:
-    """Borra los csv guardados para que la precarga no duplique registros.
+def cargar_datos_iniciales(conexion: ConexionDB) -> None:
+    """Migra los datos de migrations/csv a la base de datos.
 
-    Hay que llamarla antes de armar los repositorios, porque cada repositorio
-    lee su archivo al crearse.
+    Args:
+        conexion (ConexionDB): Conexión a la base donde se cargan los datos.
     """
-    if directorio.exists():
-        for archivo in directorio.glob('*.csv'):
-            archivo.unlink()
-
-
-def cargar_datos_iniciales(servicios: ServiciosLibreria) -> None:
-    """Carga los datos de migrations/csv usando los servicios recibidos.
-
-    Los servicios tienen que estar armados sobre una carpeta de datos vacia
-    (ver borrar_datos_guardados).
-    """
-    # como se arranca de cero, los ids que se generan son los mismos que
-    # los del csv, por eso en libros, precios, etc. se usan directamente
-    for fila in leer_csv('generos.csv'):
-        servicios.generos.crear(fila['nombre'])
-
-    for fila in leer_csv('editoriales.csv'):
-        servicios.editoriales.crear(fila['nombre'], fila['contacto'])
-
-    for fila in leer_csv('monedas.csv'):
-        servicios.monedas.crear(fila['codigo'], fila['nombre'])
-
-    for fila in leer_csv('tipos_cotizacion.csv'):
-        servicios.tipos_cotizacion.crear(fila['nombre'])
-
-    for fila in leer_csv('libros.csv'):
-        servicios.libros.crear(fila['isbn'], fila['titulo'], fila['autor'],
-                               int(fila['editorial_id']),
-                               int(fila['genero_id']))
-
-    for fila in leer_csv('precios.csv'):
-        servicios.precios.crear(int(fila['libro_id']),
-                                int(fila['moneda_id']),
-                                float(fila['valor']))
-
-    for fila in leer_csv('stock.csv'):
-        servicios.stock.crear(int(fila['libro_id']), int(fila['cantidad']))
-
-    for fila in leer_csv('cotizaciones.csv'):
-        servicios.cotizaciones.crear(
-            int(fila['tipo_id']),
-            datetime.date.fromisoformat(fila['fecha']),
-            float(fila['valor_compra']),
-            float(fila['valor_venta']),
-        )
+    migrar_datos(str(CARPETA_CSV), str(CARPETA_SQL), conexion)

@@ -1,18 +1,28 @@
 """Repositorios responsables de la persistencia de las entidades.
 
-Cada entidad se guarda en un archivo CSV propio dentro de la carpeta
-``data``. Los repositorios mantienen una copia en memoria y reescriben el
-archivo en cada operación de escritura (crear, actualizar, eliminar).
+A partir del Sprint 2 los datos se guardan en la base de datos relacional
+usando SQLAlchemy. Cada repositorio recibe una ConexionDB y trabaja dentro
+de una transacción (context manager ``transaccion``) por operación: si algo
+falla se hace rollback y no queda nada guardado a medias.
+
+Los repositorios convierten los modelos de tabla (models.py) en las
+entidades del dominio (entities.py) y viceversa, así los servicios y la
+consola siguen trabajando con las mismas clases que en el Sprint 1.
 """
 
 from __future__ import annotations
 
 import abc
-import csv
 import datetime
-from pathlib import Path
-from typing import Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import (
+    Any, Dict, Generic, List, Optional, Sequence, Type, TypeVar,
+)
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.sql.base import ExecutableOption
+
+from book_manager.database.connection import ConexionDB
 from book_manager.entities.entities import (
     CotizacionDolar,
     Editorial,
@@ -24,10 +34,20 @@ from book_manager.entities.entities import (
     Stock,
     TipoCotizacion,
 )
+from book_manager.models.models import (
+    Base,
+    CotizacionDolarModelo,
+    EditorialModelo,
+    GeneroModelo,
+    LibroModelo,
+    MonedaModelo,
+    PrecioModelo,
+    StockModelo,
+    TipoCotizacionModelo,
+)
 
 T = TypeVar('T', bound=EntidadBase)
-
-DIRECTORIO_DATOS = Path(__file__).resolve().parent.parent / 'data'
+M = TypeVar('M', bound=Base)
 
 
 # ---------------------------------------------------------------------------
@@ -217,373 +237,397 @@ class IRepositorioCotizacionDolar(abc.ABC):
 
 
 # ---------------------------------------------------------------------------
-# Persistencia en archivos CSV
+# Conversión de modelos de tabla a entidades
 # ---------------------------------------------------------------------------
 
-class ArchivoCSV:
-    """Lee y escribe filas de un archivo CSV con encabezado fijo.
+def _a_genero(modelo: GeneroModelo) -> Genero:
+    """Convierte una fila de la tabla generos en la entidad Genero."""
+    return Genero(modelo.id, modelo.nombre)
 
-    Attributes:
-        ruta (Path): Ruta del archivo CSV.
-        campos (List[str]): Nombres de las columnas.
+
+def _a_editorial(modelo: EditorialModelo) -> Editorial:
+    """Convierte una fila de la tabla editoriales en la entidad Editorial."""
+    return Editorial(modelo.id, modelo.nombre, modelo.contacto)
+
+
+def _a_moneda(modelo: MonedaModelo) -> Moneda:
+    """Convierte una fila de la tabla monedas en la entidad Moneda."""
+    return Moneda(modelo.id, modelo.codigo, modelo.nombre)
+
+
+def _a_tipo(modelo: TipoCotizacionModelo) -> TipoCotizacion:
+    """Convierte una fila de tipos_cotizacion en la entidad TipoCotizacion."""
+    return TipoCotizacion(modelo.id, modelo.nombre)
+
+
+def _a_libro(modelo: LibroModelo) -> Libro:
+    """Convierte una fila de la tabla libros en la entidad Libro."""
+    return Libro(modelo.id, modelo.isbn, modelo.titulo, modelo.autor,
+                 _a_editorial(modelo.editorial), _a_genero(modelo.genero))
+
+
+def _a_precio(modelo: PrecioModelo) -> Precio:
+    """Convierte una fila de la tabla precios en la entidad Precio."""
+    return Precio(modelo.id, _a_libro(modelo.libro),
+                  _a_moneda(modelo.moneda), float(modelo.valor))
+
+
+def _a_stock(modelo: StockModelo) -> Stock:
+    """Convierte una fila de la tabla stock en la entidad Stock."""
+    return Stock(modelo.id, _a_libro(modelo.libro), modelo.cantidad)
+
+
+def _a_cotizacion(modelo: CotizacionDolarModelo) -> CotizacionDolar:
+    """Convierte una fila de la tabla cotizaciones en CotizacionDolar."""
+    return CotizacionDolar(modelo.id, _a_tipo(modelo.tipo), modelo.fecha,
+                           float(modelo.valor_compra),
+                           float(modelo.valor_venta))
+
+
+def _siguiente_id(sesion: Session, modelo: Type[Base]) -> int:
+    """Devuelve el máximo id de la tabla más uno."""
+    maximo = sesion.scalar(select(func.max(modelo.id)))
+    return (maximo or 0) + 1
+
+
+# ---------------------------------------------------------------------------
+# Repositorio genérico sobre la base de datos
+# ---------------------------------------------------------------------------
+
+class RepositorioDB(IRepositorio[T], Generic[T, M]):
+    """Implementación genérica de IRepositorio sobre una tabla de la base.
+
+    Las subclases indican el modelo de la tabla, cómo pasar de fila a
+    entidad y qué columnas se guardan de cada entidad.
     """
 
-    def __init__(self, nombre_archivo: str, campos: List[str],
-                 directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._ruta = directorio / nombre_archivo
-        self._campos = campos
+    MODELO: Type[Base]
 
-    @property
-    def ruta(self) -> Path:
-        """Path: Ruta del archivo CSV."""
-        return self._ruta
-
-    def leer(self) -> List[Dict[str, str]]:
-        """Devuelve todas las filas del archivo (lista vacía si no existe)."""
-        if not self._ruta.exists():
-            return []
-        with self._ruta.open('r', encoding='utf-8', newline='') as archivo:
-            return list(csv.DictReader(archivo))
-
-    def escribir(self, filas: List[Dict[str, object]]) -> None:
-        """Reescribe el archivo completo con las filas recibidas."""
-        self._ruta.parent.mkdir(parents=True, exist_ok=True)
-        with self._ruta.open('w', encoding='utf-8', newline='') as archivo:
-            escritor = csv.DictWriter(archivo, fieldnames=self._campos)
-            escritor.writeheader()
-            escritor.writerows(filas)
-
-
-class RepositorioCSV(IRepositorio[T]):
-    """Implementación genérica de IRepositorio persistida en un CSV.
-
-    Las subclases definen cómo convertir una entidad en fila y viceversa.
-    """
-
-    NOMBRE_ARCHIVO: str = ''
-    CAMPOS: List[str] = []
-
-    def __init__(self, directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._archivo = ArchivoCSV(self.NOMBRE_ARCHIVO, self.CAMPOS, directorio)
-        self._entidades: Dict[int, T] = {}
-        self._cargar()
+    def __init__(self, conexion: ConexionDB) -> None:
+        self._conexion = conexion
 
     @abc.abstractmethod
-    def _a_fila(self, entidad: T) -> Dict[str, object]:
-        """Convierte una entidad en un diccionario serializable."""
+    def _a_entidad(self, modelo: M) -> T:
+        """Construye la entidad a partir de la fila de la tabla."""
 
     @abc.abstractmethod
-    def _desde_fila(self, fila: Dict[str, str]) -> T:
-        """Construye una entidad a partir de una fila del CSV."""
+    def _columnas(self, entidad: T) -> Dict[str, Any]:
+        """Devuelve los valores de las columnas a guardar de la entidad."""
 
-    def _cargar(self) -> None:
-        """Carga en memoria las entidades guardadas en el archivo."""
-        for fila in self._archivo.leer():
-            entidad = self._desde_fila(fila)
-            self._entidades[entidad.id] = entidad
+    def _opciones_carga(self) -> Sequence[ExecutableOption]:
+        """Relaciones que se traen en la misma consulta que la fila.
 
-    def _guardar(self) -> None:
-        """Persiste en el archivo el estado actual del repositorio."""
-        self._archivo.escribir(
-            [self._a_fila(e) for e in self.leer_todos()]
-        )
+        Así no se hace una consulta extra por cada fila al convertirla en
+        entidad. Por defecto no hay ninguna.
+        """
+        return []
+
+    def _consulta(self):
+        """SELECT de la tabla con sus relaciones, ordenado por id."""
+        return (select(self.MODELO).options(*self._opciones_carga())
+                .order_by(self.MODELO.id))
 
     def siguiente_id(self) -> int:
-        """Devuelve el próximo ID disponible."""
-        return max(self._entidades, default=0) + 1
+        """Devuelve el próximo ID disponible en la tabla."""
+        with self._conexion.transaccion() as sesion:
+            return _siguiente_id(sesion, self.MODELO)
 
     def crear(self, entidad: T) -> T:
-        if entidad.id in self._entidades:
-            raise ValueError(
-                f'Ya existe {type(entidad).__name__} con id {entidad.id}.'
-            )
-        self._entidades[entidad.id] = entidad
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            if sesion.get(self.MODELO, entidad.id) is not None:
+                raise ValueError(
+                    f'Ya existe {type(entidad).__name__} con id {entidad.id}.'
+                )
+            sesion.add(self.MODELO(id=entidad.id, **self._columnas(entidad)))
         return entidad
 
     def leer_por_id(self, id: int) -> Optional[T]:
-        return self._entidades.get(id)
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.scalar(
+                self._consulta().where(self.MODELO.id == id)
+            )
+            return None if modelo is None else self._a_entidad(modelo)
 
     def leer_todos(self) -> List[T]:
-        return sorted(self._entidades.values(), key=lambda e: e.id)
+        with self._conexion.transaccion() as sesion:
+            modelos = sesion.scalars(self._consulta())
+            return [self._a_entidad(m) for m in modelos]
 
     def actualizar(self, entidad: T) -> T:
-        if entidad.id not in self._entidades:
-            raise ValueError(
-                f'No existe {type(entidad).__name__} con id {entidad.id}.'
-            )
-        self._entidades[entidad.id] = entidad
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.get(self.MODELO, entidad.id)
+            if modelo is None:
+                raise ValueError(
+                    f'No existe {type(entidad).__name__} con id {entidad.id}.'
+                )
+            for columna, valor in self._columnas(entidad).items():
+                setattr(modelo, columna, valor)
         return entidad
 
     def eliminar(self, id: int) -> bool:
-        if id not in self._entidades:
-            return False
-        del self._entidades[id]
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.get(self.MODELO, id)
+            if modelo is None:
+                return False
+            sesion.delete(modelo)
         return True
 
 
-def _buscar(repositorio: IRepositorio[T], id_: int, nombre: str) -> T:
-    """Obtiene una entidad relacionada o lanza error si no existe."""
-    entidad = repositorio.leer_por_id(id_)
-    if entidad is None:
-        raise ValueError(f'No existe {nombre} con id {id_}.')
-    return entidad
+class RepositorioGenero(RepositorioDB[Genero, GeneroModelo]):
+    """Persistencia de géneros literarios (tabla generos)."""
+
+    MODELO = GeneroModelo
+
+    def _a_entidad(self, modelo: GeneroModelo) -> Genero:
+        return _a_genero(modelo)
+
+    def _columnas(self, entidad: Genero) -> Dict[str, Any]:
+        return {'nombre': entidad.nombre}
 
 
-class RepositorioGenero(RepositorioCSV[Genero]):
-    """Persistencia de géneros literarios."""
+class RepositorioEditorial(RepositorioDB[Editorial, EditorialModelo]):
+    """Persistencia de editoriales (tabla editoriales)."""
 
-    NOMBRE_ARCHIVO = 'generos.csv'
-    CAMPOS = ['id', 'nombre']
+    MODELO = EditorialModelo
 
-    def _a_fila(self, entidad: Genero) -> Dict[str, object]:
-        return {'id': entidad.id, 'nombre': entidad.nombre}
+    def _a_entidad(self, modelo: EditorialModelo) -> Editorial:
+        return _a_editorial(modelo)
 
-    def _desde_fila(self, fila: Dict[str, str]) -> Genero:
-        return Genero(int(fila['id']), fila['nombre'])
-
-
-class RepositorioEditorial(RepositorioCSV[Editorial]):
-    """Persistencia de editoriales."""
-
-    NOMBRE_ARCHIVO = 'editoriales.csv'
-    CAMPOS = ['id', 'nombre', 'contacto']
-
-    def _a_fila(self, entidad: Editorial) -> Dict[str, object]:
-        return {'id': entidad.id, 'nombre': entidad.nombre,
-                'contacto': entidad.contacto or ''}
-
-    def _desde_fila(self, fila: Dict[str, str]) -> Editorial:
-        return Editorial(int(fila['id']), fila['nombre'],
-                         fila['contacto'] or None)
+    def _columnas(self, entidad: Editorial) -> Dict[str, Any]:
+        return {'nombre': entidad.nombre, 'contacto': entidad.contacto}
 
 
-class RepositorioMoneda(RepositorioCSV[Moneda]):
-    """Persistencia de monedas."""
+class RepositorioMoneda(RepositorioDB[Moneda, MonedaModelo]):
+    """Persistencia de monedas (tabla monedas)."""
 
-    NOMBRE_ARCHIVO = 'monedas.csv'
-    CAMPOS = ['id', 'codigo', 'nombre']
+    MODELO = MonedaModelo
 
-    def _a_fila(self, entidad: Moneda) -> Dict[str, object]:
-        return {'id': entidad.id, 'codigo': entidad.codigo,
-                'nombre': entidad.nombre}
+    def _a_entidad(self, modelo: MonedaModelo) -> Moneda:
+        return _a_moneda(modelo)
 
-    def _desde_fila(self, fila: Dict[str, str]) -> Moneda:
-        return Moneda(int(fila['id']), fila['codigo'], fila['nombre'])
+    def _columnas(self, entidad: Moneda) -> Dict[str, Any]:
+        return {'codigo': entidad.codigo, 'nombre': entidad.nombre}
 
 
-class RepositorioTipoCotizacion(RepositorioCSV[TipoCotizacion]):
-    """Persistencia de tipos de cotización del dólar."""
+class RepositorioTipoCotizacion(
+        RepositorioDB[TipoCotizacion, TipoCotizacionModelo]):
+    """Persistencia de tipos de cotización (tabla tipos_cotizacion)."""
 
-    NOMBRE_ARCHIVO = 'tipos_cotizacion.csv'
-    CAMPOS = ['id', 'nombre']
+    MODELO = TipoCotizacionModelo
 
-    def _a_fila(self, entidad: TipoCotizacion) -> Dict[str, object]:
-        return {'id': entidad.id, 'nombre': entidad.nombre}
+    def _a_entidad(self, modelo: TipoCotizacionModelo) -> TipoCotizacion:
+        return _a_tipo(modelo)
 
-    def _desde_fila(self, fila: Dict[str, str]) -> TipoCotizacion:
-        return TipoCotizacion(int(fila['id']), fila['nombre'])
+    def _columnas(self, entidad: TipoCotizacion) -> Dict[str, Any]:
+        return {'nombre': entidad.nombre}
 
 
-class RepositorioLibro(RepositorioCSV[Libro]):
-    """Persistencia de libros. Resuelve editorial y género por ID."""
+class RepositorioLibro(RepositorioDB[Libro, LibroModelo]):
+    """Persistencia de libros (tabla libros)."""
 
-    NOMBRE_ARCHIVO = 'libros.csv'
-    CAMPOS = ['id', 'isbn', 'titulo', 'autor', 'editorial_id', 'genero_id']
+    MODELO = LibroModelo
 
-    def __init__(self, repo_editorial: RepositorioEditorial,
-                 repo_genero: RepositorioGenero,
-                 directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._repo_editorial = repo_editorial
-        self._repo_genero = repo_genero
-        super().__init__(directorio)
+    def _opciones_carga(self) -> Sequence[ExecutableOption]:
+        return [selectinload(LibroModelo.editorial),
+                selectinload(LibroModelo.genero)]
 
-    def _a_fila(self, entidad: Libro) -> Dict[str, object]:
-        return {'id': entidad.id, 'isbn': entidad.isbn,
-                'titulo': entidad.titulo, 'autor': entidad.autor,
+    def _a_entidad(self, modelo: LibroModelo) -> Libro:
+        return _a_libro(modelo)
+
+    def _columnas(self, entidad: Libro) -> Dict[str, Any]:
+        return {'isbn': entidad.isbn, 'titulo': entidad.titulo,
+                'autor': entidad.autor,
                 'editorial_id': entidad.editorial.id,
                 'genero_id': entidad.genero.id}
 
-    def _desde_fila(self, fila: Dict[str, str]) -> Libro:
-        return Libro(
-            int(fila['id']), fila['isbn'], fila['titulo'], fila['autor'],
-            _buscar(self._repo_editorial, int(fila['editorial_id']), 'Editorial'),
-            _buscar(self._repo_genero, int(fila['genero_id']), 'Genero'),
-        )
-
     def leer_por_isbn(self, isbn: str) -> Optional[Libro]:
         """Busca un libro por su ISBN."""
-        return next(
-            (libro for libro in self._entidades.values()
-             if libro.isbn == isbn.strip()),
-            None,
-        )
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.scalar(
+                self._consulta().where(LibroModelo.isbn == isbn.strip())
+            )
+            return None if modelo is None else _a_libro(modelo)
 
 
-class RepositorioPrecio(RepositorioCSV[Precio]):
-    """Persistencia de precios. Resuelve libro y moneda por ID."""
+class RepositorioPrecio(RepositorioDB[Precio, PrecioModelo]):
+    """Persistencia de precios (tabla precios)."""
 
-    NOMBRE_ARCHIVO = 'precios.csv'
-    CAMPOS = ['id', 'libro_id', 'moneda_id', 'valor']
+    MODELO = PrecioModelo
 
-    def __init__(self, repo_libro: RepositorioLibro,
-                 repo_moneda: RepositorioMoneda,
-                 directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._repo_libro = repo_libro
-        self._repo_moneda = repo_moneda
-        super().__init__(directorio)
+    def _opciones_carga(self) -> Sequence[ExecutableOption]:
+        libro = selectinload(PrecioModelo.libro)
+        return [libro.selectinload(LibroModelo.editorial),
+                libro.selectinload(LibroModelo.genero),
+                selectinload(PrecioModelo.moneda)]
 
-    def _a_fila(self, entidad: Precio) -> Dict[str, object]:
-        return {'id': entidad.id, 'libro_id': entidad.libro.id,
-                'moneda_id': entidad.moneda.id, 'valor': entidad.valor}
+    def _a_entidad(self, modelo: PrecioModelo) -> Precio:
+        return _a_precio(modelo)
 
-    def _desde_fila(self, fila: Dict[str, str]) -> Precio:
-        return Precio(
-            int(fila['id']),
-            _buscar(self._repo_libro, int(fila['libro_id']), 'Libro'),
-            _buscar(self._repo_moneda, int(fila['moneda_id']), 'Moneda'),
-            float(fila['valor']),
-        )
+    def _columnas(self, entidad: Precio) -> Dict[str, Any]:
+        return {'libro_id': entidad.libro.id,
+                'moneda_id': entidad.moneda.id,
+                'valor': entidad.valor}
 
     def leer_por_libro(self, libro_id: int) -> List[Precio]:
         """Devuelve los precios de un libro en todas sus monedas."""
-        return [p for p in self.leer_todos() if p.libro.id == libro_id]
+        with self._conexion.transaccion() as sesion:
+            consulta = self._consulta().where(
+                PrecioModelo.libro_id == libro_id
+            )
+            return [_a_precio(m) for m in sesion.scalars(consulta)]
 
 
 class RepositorioStock(IRepositorioStock):
-    """Persistencia de stock. Un único registro por libro."""
+    """Persistencia de stock (tabla stock). Un único registro por libro."""
 
-    CAMPOS = ['id', 'libro_id', 'cantidad']
+    def __init__(self, conexion: ConexionDB) -> None:
+        self._conexion = conexion
 
-    def __init__(self, repo_libro: RepositorioLibro,
-                 directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._repo_libro = repo_libro
-        self._archivo = ArchivoCSV('stock.csv', self.CAMPOS, directorio)
-        self._stocks: Dict[int, Stock] = {}
-        for fila in self._archivo.leer():
-            libro = _buscar(repo_libro, int(fila['libro_id']), 'Libro')
-            self._stocks[libro.id] = Stock(int(fila['id']), libro,
-                                           int(fila['cantidad']))
+    @staticmethod
+    def _consulta():
+        libro = selectinload(StockModelo.libro)
+        return (select(StockModelo)
+                .options(libro.selectinload(LibroModelo.editorial),
+                         libro.selectinload(LibroModelo.genero))
+                .order_by(StockModelo.id))
 
-    def _guardar(self) -> None:
-        self._archivo.escribir([
-            {'id': s.id, 'libro_id': s.libro.id, 'cantidad': s.cantidad}
-            for s in self.leer_todos()
-        ])
+    @staticmethod
+    def _buscar(sesion: Session, libro_id: int) -> Optional[StockModelo]:
+        return sesion.scalar(
+            select(StockModelo).where(StockModelo.libro_id == libro_id)
+        )
 
     def siguiente_id(self) -> int:
-        """Devuelve el próximo ID disponible."""
-        return max((s.id for s in self._stocks.values()), default=0) + 1
+        """Devuelve el próximo ID disponible en la tabla."""
+        with self._conexion.transaccion() as sesion:
+            return _siguiente_id(sesion, StockModelo)
 
     def crear(self, stock: Stock) -> Stock:
-        if stock.libro.id in self._stocks:
-            raise ValueError(
-                f'Ya existe stock para el libro {stock.libro.id}.'
-            )
-        self._stocks[stock.libro.id] = stock
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            if self._buscar(sesion, stock.libro.id) is not None:
+                raise ValueError(
+                    f'Ya existe stock para el libro {stock.libro.id}.'
+                )
+            sesion.add(StockModelo(id=stock.id, libro_id=stock.libro.id,
+                                   cantidad=stock.cantidad))
         return stock
 
     def leer_por_libro(self, libro_id: int) -> Optional[Stock]:
-        return self._stocks.get(libro_id)
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.scalar(
+                self._consulta().where(StockModelo.libro_id == libro_id)
+            )
+            return None if modelo is None else _a_stock(modelo)
 
     def leer_todos(self) -> List[Stock]:
         """Devuelve todos los registros de stock ordenados por ID."""
-        return sorted(self._stocks.values(), key=lambda s: s.id)
+        with self._conexion.transaccion() as sesion:
+            return [_a_stock(m) for m in sesion.scalars(self._consulta())]
 
     def actualizar(self, stock: Stock) -> Stock:
-        if stock.libro.id not in self._stocks:
-            raise ValueError(
-                f'No existe stock para el libro {stock.libro.id}.'
-            )
-        self._stocks[stock.libro.id] = stock
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = self._buscar(sesion, stock.libro.id)
+            if modelo is None:
+                raise ValueError(
+                    f'No existe stock para el libro {stock.libro.id}.'
+                )
+            modelo.cantidad = stock.cantidad
         return stock
 
     def eliminar(self, libro_id: int) -> bool:
-        if libro_id not in self._stocks:
-            return False
-        del self._stocks[libro_id]
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = self._buscar(sesion, libro_id)
+            if modelo is None:
+                return False
+            sesion.delete(modelo)
         return True
 
 
 class RepositorioCotizacionDolar(IRepositorioCotizacionDolar):
     """Persistencia del histórico de cotizaciones (clave: tipo + fecha)."""
 
-    CAMPOS = ['id', 'tipo_id', 'fecha', 'valor_compra', 'valor_venta']
-
-    def __init__(self, repo_tipo: RepositorioTipoCotizacion,
-                 directorio: Path = DIRECTORIO_DATOS) -> None:
-        self._repo_tipo = repo_tipo
-        self._archivo = ArchivoCSV('cotizaciones.csv', self.CAMPOS, directorio)
-        self._cotizaciones: Dict[Tuple[int, datetime.date], CotizacionDolar] = {}
-        for fila in self._archivo.leer():
-            cotizacion = CotizacionDolar(
-                int(fila['id']),
-                _buscar(repo_tipo, int(fila['tipo_id']), 'TipoCotizacion'),
-                datetime.date.fromisoformat(fila['fecha']),
-                float(fila['valor_compra']),
-                float(fila['valor_venta']),
-            )
-            self._cotizaciones[self._clave(cotizacion)] = cotizacion
+    def __init__(self, conexion: ConexionDB) -> None:
+        self._conexion = conexion
 
     @staticmethod
-    def _clave(cotizacion: CotizacionDolar) -> Tuple[int, datetime.date]:
-        return cotizacion.tipo.id, cotizacion.fecha
+    def _consulta():
+        return (select(CotizacionDolarModelo)
+                .options(selectinload(CotizacionDolarModelo.tipo)))
 
-    def _guardar(self) -> None:
-        self._archivo.escribir([
-            {'id': c.id, 'tipo_id': c.tipo.id, 'fecha': c.fecha.isoformat(),
-             'valor_compra': c.valor_compra, 'valor_venta': c.valor_venta}
-            for c in self.leer_todos()
-        ])
+    @staticmethod
+    def _buscar(sesion: Session, tipo_id: int,
+                fecha: datetime.date) -> Optional[CotizacionDolarModelo]:
+        return sesion.scalar(
+            select(CotizacionDolarModelo).where(
+                CotizacionDolarModelo.tipo_id == tipo_id,
+                CotizacionDolarModelo.fecha == fecha,
+            )
+        )
 
     def siguiente_id(self) -> int:
-        """Devuelve el próximo ID disponible."""
-        return max((c.id for c in self._cotizaciones.values()), default=0) + 1
+        """Devuelve el próximo ID disponible en la tabla."""
+        with self._conexion.transaccion() as sesion:
+            return _siguiente_id(sesion, CotizacionDolarModelo)
 
     def crear(self, cotizacion: CotizacionDolar) -> CotizacionDolar:
-        clave = self._clave(cotizacion)
-        if clave in self._cotizaciones:
-            raise ValueError(
-                f'Ya existe cotización {cotizacion.tipo} para {cotizacion.fecha}.'
-            )
-        self._cotizaciones[clave] = cotizacion
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            if self._buscar(sesion, cotizacion.tipo.id,
+                            cotizacion.fecha) is not None:
+                raise ValueError(
+                    f'Ya existe cotización {cotizacion.tipo} para '
+                    f'{cotizacion.fecha}.'
+                )
+            sesion.add(CotizacionDolarModelo(
+                id=cotizacion.id, tipo_id=cotizacion.tipo.id,
+                fecha=cotizacion.fecha,
+                valor_compra=cotizacion.valor_compra,
+                valor_venta=cotizacion.valor_venta,
+            ))
         return cotizacion
 
     def leer_por_tipo_y_fecha(
         self, tipo_id: int, fecha: datetime.date
     ) -> Optional[CotizacionDolar]:
-        return self._cotizaciones.get((tipo_id, fecha))
+        with self._conexion.transaccion() as sesion:
+            modelo = sesion.scalar(self._consulta().where(
+                CotizacionDolarModelo.tipo_id == tipo_id,
+                CotizacionDolarModelo.fecha == fecha,
+            ))
+            return None if modelo is None else _a_cotizacion(modelo)
 
     def leer_historico_por_tipo(self, tipo_id: int) -> List[CotizacionDolar]:
-        return sorted(
-            (c for c in self._cotizaciones.values() if c.tipo.id == tipo_id),
-            key=lambda c: c.fecha,
-        )
+        with self._conexion.transaccion() as sesion:
+            consulta = (self._consulta()
+                        .where(CotizacionDolarModelo.tipo_id == tipo_id)
+                        .order_by(CotizacionDolarModelo.fecha))
+            return [_a_cotizacion(m) for m in sesion.scalars(consulta)]
 
     def leer_todos(self) -> List[CotizacionDolar]:
         """Devuelve todas las cotizaciones ordenadas por fecha y tipo."""
-        return sorted(self._cotizaciones.values(),
-                      key=lambda c: (c.fecha, c.tipo.id))
+        with self._conexion.transaccion() as sesion:
+            consulta = self._consulta().order_by(
+                CotizacionDolarModelo.fecha, CotizacionDolarModelo.tipo_id
+            )
+            return [_a_cotizacion(m) for m in sesion.scalars(consulta)]
 
     def actualizar(self, cotizacion: CotizacionDolar) -> CotizacionDolar:
-        clave = self._clave(cotizacion)
-        if clave not in self._cotizaciones:
-            raise ValueError(
-                f'No existe cotización {cotizacion.tipo} para {cotizacion.fecha}.'
-            )
-        self._cotizaciones[clave] = cotizacion
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = self._buscar(sesion, cotizacion.tipo.id,
+                                  cotizacion.fecha)
+            if modelo is None:
+                raise ValueError(
+                    f'No existe cotización {cotizacion.tipo} para '
+                    f'{cotizacion.fecha}.'
+                )
+            modelo.valor_compra = cotizacion.valor_compra
+            modelo.valor_venta = cotizacion.valor_venta
         return cotizacion
 
     def eliminar(self, tipo_id: int, fecha: datetime.date) -> bool:
-        if (tipo_id, fecha) not in self._cotizaciones:
-            return False
-        del self._cotizaciones[(tipo_id, fecha)]
-        self._guardar()
+        with self._conexion.transaccion() as sesion:
+            modelo = self._buscar(sesion, tipo_id, fecha)
+            if modelo is None:
+                return False
+            sesion.delete(modelo)
         return True
+
