@@ -8,7 +8,12 @@ cotizacion del dolar.
 from __future__ import annotations
 
 import datetime
-from typing import Dict, List, Optional
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import requests
+from dotenv import load_dotenv
 
 from book_manager.entities.entities import (
     CotizacionDolar,
@@ -381,6 +386,25 @@ class ServicioStock:
         return self._repositorio.eliminar(libro_id)
 
 
+# Archivo .env en la raiz del repositorio (book_manager/.env)
+RUTA_ENV = Path(__file__).resolve().parents[3] / '.env'
+
+# Zona horaria de Argentina (UTC-3) para pasar la fecha de la API a dia local
+ZONA_ARGENTINA = datetime.timezone(datetime.timedelta(hours=-3))
+
+# Relacion entre el campo "casa" de la API y los tipos de cotizacion del
+# sistema. Si aparece una casa nueva se usa el nombre que trae la API.
+TIPOS_POR_CASA = {
+    'oficial': 'Oficial',
+    'blue': 'Blue',
+    'bolsa': 'MEP',
+    'contadoconliqui': 'CCL',
+    'mayorista': 'Mayorista',
+    'cripto': 'Cripto',
+    'tarjeta': 'Tarjeta',
+}
+
+
 class ServicioCotizacionDolar:
     """Logica de las cotizaciones del dolar."""
 
@@ -443,6 +467,80 @@ class ServicioCotizacionDolar:
         """Borra una cotizacion."""
         self.obtener(tipo_id, fecha)
         return self._repositorio.eliminar(tipo_id, fecha)
+
+    def _descargar(self, timeout: int) -> List[Dict[str, Any]]:
+        """Descarga las cotizaciones de la API configurada en el .env."""
+        load_dotenv(RUTA_ENV)
+        url = os.getenv('API_URL')
+        if not url:
+            raise ValueError('Falta la variable API_URL en el archivo .env.')
+        try:
+            respuesta = requests.get(url, timeout=timeout)
+            respuesta.raise_for_status()
+            return respuesta.json()
+        except (requests.RequestException, ValueError) as error:
+            raise ValueError(
+                f'No se pudieron obtener las cotizaciones: {error}'
+            ) from error
+
+    def _tipo_para(self, dato: Dict[str, Any],
+                   guardar: bool) -> TipoCotizacion:
+        """Busca el tipo de cotizacion que corresponde a un dato de la API.
+
+        Si no existe y se va a guardar, se da de alta.
+        """
+        nombre = TIPOS_POR_CASA.get(dato['casa'], dato['nombre'])
+        for tipo in self._servicio_tipo.listar():
+            if tipo.nombre.lower() == nombre.lower():
+                return tipo
+        if guardar:
+            return self._servicio_tipo.crear(nombre)
+        return TipoCotizacion(0, nombre)
+
+    @staticmethod
+    def _fecha_api(texto: str) -> datetime.date:
+        """Convierte la fecha de la API (UTC) en la fecha de Argentina."""
+        momento = datetime.datetime.fromisoformat(texto.replace('Z', '+00:00'))
+        return momento.astimezone(ZONA_ARGENTINA).date()
+
+    def obtener_cotizaciones(self, guardar: bool = True,
+                             timeout: int = 10) -> List[CotizacionDolar]:
+        """Busca, descarga y registra las cotizaciones del dolar.
+
+        Consulta la API indicada en la variable API_URL del archivo .env.
+        Por cada tipo de dolar que devuelve la API se registra la cotizacion
+        del dia: si ya habia una para ese tipo y fecha se actualizan los
+        valores, si no se crea. Los datos sin compra o sin venta se omiten.
+
+        Args:
+            guardar (bool): Si es False solo se descargan las cotizaciones,
+                sin registrar nada en la base.
+            timeout (int): Segundos maximos de espera de la API.
+
+        Returns:
+            List[CotizacionDolar]: Las cotizaciones obtenidas.
+
+        Raises:
+            ValueError: Si falta API_URL o la API no responde bien.
+        """
+        cotizaciones = []
+        for dato in self._descargar(timeout):
+            compra, venta = dato.get('compra'), dato.get('venta')
+            if compra is None or venta is None:
+                continue
+            tipo = self._tipo_para(dato, guardar)
+            fecha = self._fecha_api(dato['fechaActualizacion'])
+            if not guardar:
+                cotizaciones.append(
+                    CotizacionDolar(0, tipo, fecha, compra, venta)
+                )
+            elif self._repositorio.leer_por_tipo_y_fecha(tipo.id, fecha):
+                cotizaciones.append(
+                    self.actualizar(tipo.id, fecha, compra, venta)
+                )
+            else:
+                cotizaciones.append(self.crear(tipo.id, fecha, compra, venta))
+        return cotizaciones
 
 
 class ServicioCotizador:

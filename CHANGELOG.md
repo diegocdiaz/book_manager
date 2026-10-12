@@ -2,6 +2,12 @@
 
 ## Sprint 2
 
+### [Ejercicio 07]
+- Archivo .env con la URL de la API del dólar (API_URL). La URL de la base no se guarda ahí porque tiene la contraseña.
+- Función obtener_cotizaciones en ServicioCotizacionDolar: descarga las cotizaciones de la API y las registra en la base (si ya existe la del día, la actualiza).
+- Relación entre las casas de la API (oficial, blue, bolsa, etc.) y los tipos de cotización del sistema.
+- Se agregan requests y python-dotenv a requirements.txt.
+
 
 ### [Ejercicio 06]
 - Los repositorios pasan a guardar los datos en la base de datos con SQLAlchemy en lugar de archivos CSV.

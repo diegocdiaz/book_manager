@@ -4,3 +4,7 @@
 SQLAlchemy>=2.0
 # Driver de PostgreSQL (la base está en Supabase)
 psycopg2-binary>=2.9
+# Consultas HTTP a la API del dólar
+requests>=2.31
+# Lectura de la configuración del archivo .env
+python-dotenv>=1.0
