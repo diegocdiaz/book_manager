@@ -2,6 +2,11 @@
 
 ## Sprint 2
 
+### [Ejercicio 04]
+- Definición de las tablas del sistema con sus tipos de datos y relaciones en models/models.py.
+- Restricciones para que precios, stock y cotizaciones no admitan valores negativos.
+- Función crear_tablas para generar las tablas en la base.
+
 [Ejercicio 03]
 - Context manager transaccion() en ConexionDB para manejar las
   transacciones: hace commit si todo sale bien y rollback si hay un error.
