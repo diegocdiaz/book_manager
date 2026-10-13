@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 from collections import Counter
 from functools import reduce, wraps
+from pathlib import Path
 from typing import (
     Callable,
     Dict,
@@ -33,6 +34,10 @@ Accion = Callable[..., None]
 
 # texto con el que se muestra una celda vacía en las tablas
 SIN_DATO = '-'
+
+# archivo por defecto de la exportación de precios (book_manager/exports)
+RUTA_EXPORTACION = (Path(__file__).resolve().parents[3] / 'exports'
+                    / 'precios_libros.csv')
 
 
 def formatear(valor: object) -> str:
@@ -333,6 +338,9 @@ class ConsolaLibreria:
             ('Stock', self._menu_stock),
             ('Cotizaciones del dólar', self._menu_cotizaciones),
             ('Reportes', self._menu_reportes),
+            ('Obtener las cotizaciones por API', self._obtener_cotizaciones),
+            ('Lista de precios bimonetaria', self._lista_bimonetaria),
+            ('Exportar precios a CSV', self._exportar_precios),
         ], salida='Salir').ejecutar()
         print('\nHasta luego.')
 
@@ -905,3 +913,41 @@ class ConsolaLibreria:
             [(registro.libro.id, registro.libro.titulo, registro.cantidad)
              for registro in faltantes],
         )
+
+    # ------------------------------------------------------------------
+    # API del dólar y precios bimonetarios
+    # ------------------------------------------------------------------
+    @operacion('Obtener las cotizaciones por API')
+    def _obtener_cotizaciones(self) -> None:
+        print('\n  Consultando la API del dólar...')
+        cotizaciones = self._servicios.cotizaciones.obtener_cotizaciones()
+        imprimir_tabla(
+            ('Tipo', 'Fecha', 'Compra', 'Venta'),
+            [(cotizacion.tipo.nombre, cotizacion.fecha,
+              cotizacion.valor_compra, cotizacion.valor_venta)
+             for cotizacion in cotizaciones],
+        )
+        print('  Cotizaciones registradas en la base de datos.')
+
+    @operacion('Lista de precios bimonetaria')
+    def _lista_bimonetaria(self) -> None:
+        tipo_id = self._pedir_tipo_id()
+        datos = self._servicios.cotizador.cotizar_todos(tipo_id)
+        if not datos:
+            raise ValueError('Ningún libro tiene precio cargado.')
+
+        primera = datos[0]
+        print(f'\n  Dólar {primera["tipo"]} del {primera["fecha"]}: '
+              f'venta {primera["dolar"]:,.2f}')
+        imprimir_tabla(
+            ('Id', 'Título', 'Autor', 'Precio ARS',
+             f'Precio USD ({primera["tipo"]})'),
+            [(fila['libro'].id, fila['libro'].titulo, fila['libro'].autor,
+              fila['ars'], fila['usd']) for fila in datos],
+        )
+
+    @operacion('Exportar precios a CSV')
+    def _exportar_precios(self) -> None:
+        ruta = Path(leer_texto('Archivo de salida', str(RUTA_EXPORTACION)))
+        cantidad = self._servicios.cotizador.exportar_precios_csv(ruta)
+        print(f'\n  Se exportaron {cantidad} fila(s) a {ruta}.')

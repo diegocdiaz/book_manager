@@ -2,6 +2,13 @@
 
 ## Sprint 2
 
+### [Ejercicio 08]
+- Nuevas opciones en el menú principal: obtener las cotizaciones por API, ver la lista de precios bimonetaria y exportar los precios a CSV.
+- Lista de precios bimonetaria: muestra el precio de cada libro en pesos y en dólares según el tipo de cotización elegido.
+- Exportación a CSV con el precio en ARS y USD de cada libro para todos los tipos de dólar que tienen cotización (por defecto en exports/precios_libros.csv).
+- En los servicios se agregan ultimas(), precios_por_libro() y exportar_precios_csv(), y el cotizador reutiliza la misma regla de conversión para todos los cálculos.
+- Se agrega la carpeta exports/ al .gitignore.
+
 ### [Ejercicio 07]
 - Archivo .env con la URL de la API del dólar (API_URL). La URL de la base no se guarda ahí porque tiene la contraseña.
 - Función obtener_cotizaciones en ServicioCotizacionDolar: descarga las cotizaciones de la API y las registra en la base (si ya existe la del día, la actualiza).

@@ -7,6 +7,7 @@ cotizacion del dolar.
 
 from __future__ import annotations
 
+import csv
 import datetime
 import os
 from pathlib import Path
@@ -322,6 +323,19 @@ class ServicioPrecio(ServicioBase):
                 return precio
         return None
 
+    def precios_por_libro(self) -> Dict[int, Dict[str, float]]:
+        """Agrupa todos los precios por libro y por codigo de moneda.
+
+        Returns:
+            Dict[int, Dict[str, float]]: Para cada id de libro, el valor de
+                su precio en cada moneda (ej: {2: {'USD': 26.0}}).
+        """
+        precios: Dict[int, Dict[str, float]] = {}
+        for precio in self.listar():
+            precios.setdefault(precio.libro.id, {})[precio.moneda.codigo] = (
+                precio.valor)
+        return precios
+
     def crear(self, libro_id: int, moneda_id: int, valor: float) -> Precio:
         """Carga el precio de un libro en una moneda."""
         libro = self._servicio_libro.obtener(libro_id)
@@ -436,6 +450,23 @@ class ServicioCotizacionDolar:
             raise ValueError('Ese tipo de dolar no tiene cotizaciones.')
         return historico[-1]
 
+    def ultimas(self) -> List[CotizacionDolar]:
+        """Devuelve la cotizacion mas nueva de cada tipo que tiene datos.
+
+        Se leen todas las cotizaciones en una sola consulta y se queda la de
+        fecha mas reciente de cada tipo.
+
+        Returns:
+            List[CotizacionDolar]: Una cotizacion por tipo, ordenadas por el
+                id del tipo.
+        """
+        ultimas: Dict[int, CotizacionDolar] = {}
+        for cotizacion in self.listar():
+            actual = ultimas.get(cotizacion.tipo.id)
+            if actual is None or cotizacion.fecha > actual.fecha:
+                ultimas[cotizacion.tipo.id] = cotizacion
+        return [ultimas[tipo_id] for tipo_id in sorted(ultimas)]
+
     def _validar(self, fecha: datetime.date, compra: float,
                  venta: float) -> None:
         if fecha > datetime.date.today():
@@ -543,6 +574,13 @@ class ServicioCotizacionDolar:
         return cotizaciones
 
 
+# Columnas del CSV con la lista de precios bimonetaria
+ENCABEZADOS_EXPORTACION = (
+    'libro_id', 'isbn', 'titulo', 'autor', 'tipo_dolar', 'fecha_cotizacion',
+    'dolar_venta', 'precio_ars', 'precio_usd',
+)
+
+
 class ServicioCotizador:
     """Calcula los precios de los libros en pesos y dolares.
 
@@ -558,40 +596,111 @@ class ServicioCotizador:
         self._servicio_precio = servicio_precio
         self._servicio_cotizacion = servicio_cotizacion
 
-    def cotizar_libro(self, libro_id: int, tipo_id: int) -> Dict:
-        """Devuelve un diccionario con el precio del libro en ARS y USD."""
-        libro = self._servicio_libro.obtener(libro_id)
-        cotizacion = self._servicio_cotizacion.ultima(tipo_id)
-        dolar = cotizacion.valor_venta
+    @staticmethod
+    def _cotizar(libro: Libro, cotizacion: CotizacionDolar,
+                 precios: Dict[str, float]) -> Optional[Dict]:
+        """Pasa el precio de un libro a ARS y USD con una cotizacion.
 
-        precio_usd = self._servicio_precio.buscar_precio(libro_id, 'USD')
-        precio_ars = self._servicio_precio.buscar_precio(libro_id, 'ARS')
-        if precio_usd is not None:
-            usd = precio_usd.valor
+        Args:
+            libro (Libro): Libro a cotizar.
+            cotizacion (CotizacionDolar): Cotizacion cuyo valor de venta se
+                usa para la conversion.
+            precios (Dict[str, float]): Precios del libro por codigo de
+                moneda.
+
+        Returns:
+            Optional[Dict]: Los datos de la cotizacion del libro, o None si
+                no tiene precio en USD ni en ARS.
+        """
+        dolar = cotizacion.valor_venta
+        if 'USD' in precios:
+            usd = precios['USD']
             ars = usd * dolar
-        elif precio_ars is not None:
-            ars = precio_ars.valor
+        elif 'ARS' in precios:
+            ars = precios['ARS']
             usd = ars / dolar
         else:
-            raise ValueError(f'{libro.titulo} no tiene precio cargado.')
+            return None
 
         return {
             'libro': libro,
             'tipo': cotizacion.tipo.nombre,
+            'fecha': cotizacion.fecha,
             'dolar': dolar,
             'ars': round(ars, 2),
             'usd': round(usd, 2),
         }
 
+    def _cotizar_catalogo(self, libros: List[Libro],
+                          cotizacion: CotizacionDolar,
+                          precios: Dict[int, Dict[str, float]]) -> List[Dict]:
+        """Cotiza con una misma cotizacion los libros que tienen precio."""
+        filas = (self._cotizar(libro, cotizacion, precios.get(libro.id, {}))
+                 for libro in libros)
+        return [fila for fila in filas if fila is not None]
+
+    def cotizar_libro(self, libro_id: int, tipo_id: int) -> Dict:
+        """Devuelve un diccionario con el precio del libro en ARS y USD."""
+        libro = self._servicio_libro.obtener(libro_id)
+        cotizacion = self._servicio_cotizacion.ultima(tipo_id)
+
+        precios = {}
+        for codigo in ('USD', 'ARS'):
+            precio = self._servicio_precio.buscar_precio(libro_id, codigo)
+            if precio is not None:
+                precios[codigo] = precio.valor
+
+        fila = self._cotizar(libro, cotizacion, precios)
+        if fila is None:
+            raise ValueError(f'{libro.titulo} no tiene precio cargado.')
+        return fila
+
     def cotizar_todos(self, tipo_id: int) -> List[Dict]:
         """Cotiza todos los libros que tienen precio."""
-        resultado = []
-        for libro in self._servicio_libro.listar():
-            try:
-                resultado.append(self.cotizar_libro(libro.id, tipo_id))
-            except ValueError:
-                pass  # si no tiene precio lo salteo
-        return resultado
+        cotizacion = self._servicio_cotizacion.ultima(tipo_id)
+        precios = self._servicio_precio.precios_por_libro()
+        return self._cotizar_catalogo(self._servicio_libro.listar(),
+                                      cotizacion, precios)
+
+    def exportar_precios_csv(self, ruta: Path) -> int:
+        """Exporta a CSV los precios en ARS y USD para cada tipo de dolar.
+
+        Se genera una fila por cada libro con precio y cada tipo de
+        cotizacion que tenga datos, usando la ultima cotizacion de ese tipo.
+
+        Args:
+            ruta (Path): Archivo CSV a generar. Si la carpeta no existe se
+                crea.
+
+        Returns:
+            int: Cantidad de filas exportadas.
+
+        Raises:
+            ValueError: Si no hay cotizaciones o ningun libro tiene precio.
+        """
+        cotizaciones = self._servicio_cotizacion.ultimas()
+        if not cotizaciones:
+            raise ValueError('No hay cotizaciones del dolar cargadas.')
+
+        libros = self._servicio_libro.listar()
+        precios = self._servicio_precio.precios_por_libro()
+        filas = [fila for cotizacion in cotizaciones
+                 for fila in self._cotizar_catalogo(libros, cotizacion,
+                                                    precios)]
+        if not filas:
+            raise ValueError('Ningun libro tiene precio cargado.')
+
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        with ruta.open('w', newline='', encoding='utf-8') as archivo:
+            escritor = csv.writer(archivo)
+            escritor.writerow(ENCABEZADOS_EXPORTACION)
+            escritor.writerows(
+                (fila['libro'].id, fila['libro'].isbn, fila['libro'].titulo,
+                 fila['libro'].autor, fila['tipo'], fila['fecha'].isoformat(),
+                 fila['dolar'], fila['ars'], fila['usd'])
+                for fila in filas
+            )
+        return len(filas)
 
     def comparar_competencia(self, libro_id: int, tipo_id: int,
                              precio_competencia: float,
