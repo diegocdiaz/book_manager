@@ -47,6 +47,7 @@
   conexión a la base PostgreSQL de Supabase con SQLAlchemy.
 - La URL de conexión se lee de la variable de entorno DATABASE_URL.
 - Se agregan SQLAlchemy y psycopg2-binary a requirements.txt.
+- ConexionDB carga el archivo .env por sí misma con python-dotenv (ruta RUTA_ENV), en lugar de depender de que quien la use lo cargue antes.
 
 ### [Ejercicio 01]
 - Creación de la rama Sprint_2 a partir de la rama Sprint_1.

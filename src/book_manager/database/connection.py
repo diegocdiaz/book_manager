@@ -9,10 +9,15 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator, Optional
 
+from dotenv import load_dotenv
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+
+# Archivo .env en la raíz del repositorio (book_manager/.env)
+RUTA_ENV = Path(__file__).resolve().parents[3] / '.env'
 
 
 class ConexionDB:
@@ -29,6 +34,7 @@ class ConexionDB:
             ValueError: Si no hay URL de conexión.
         """
         if url is None:
+            load_dotenv(RUTA_ENV)
             url = os.getenv('DATABASE_URL')
         if not url:
             raise ValueError('Falta la URL de conexion (DATABASE_URL).')
