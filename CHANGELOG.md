@@ -22,6 +22,7 @@
 - Se mantienen los mismos métodos de los repositorios, así los servicios y la consola no cambian.
 - main.py arma los repositorios con ConexionDB y, si la base está vacía, migra los datos de migrations/csv.
 - La carga inicial de preload_data.py usa la función migrar_datos.
+- Los errores de integridad de la base de datos (valor repetido, clave foránea inexistente, valor fuera de regla) se traducen a ValueError en los repositorios con un decorador, para que la consola los muestre sin cortar el programa.
 
 ### [Ejercicio 05]
 - Migración de los datos de los CSV a la base de datos con la función migrar_datos en migrations/migrations.py.

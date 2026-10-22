@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import abc
 import datetime
+import functools
 from typing import (
     Any, Dict, Generic, List, Optional, Sequence, Type, TypeVar,
 )
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 
@@ -284,6 +286,44 @@ def _a_cotizacion(modelo: CotizacionDolarModelo) -> CotizacionDolar:
                            float(modelo.valor_venta))
 
 
+# Códigos de error de PostgreSQL para los problemas de integridad
+_MENSAJES_INTEGRIDAD = {
+    '23505': 'Ya existe un registro con esos datos (valor repetido).',
+    '23503': 'El registro se relaciona con otro que no existe o que está '
+             'en uso.',
+    '23502': 'Falta un dato obligatorio.',
+    '23514': 'Hay un valor que no cumple las reglas de la tabla.',
+}
+
+
+def _traducir_errores_db(funcion):
+    """Convierte los errores de integridad de la base en ValueError.
+
+    La base de datos puede rechazar una operación aunque el repositorio no
+    lo haya detectado antes (ISBN repetido, clave foránea inexistente,
+    valor fuera de rango). Ese error sale de SQLAlchemy como
+    IntegrityError; acá se transforma en ValueError con un mensaje claro,
+    así los servicios y la consola lo manejan igual que las demás
+    validaciones.
+
+    Args:
+        funcion: Método del repositorio que escribe en la base.
+
+    Returns:
+        El método envuelto.
+    """
+    @functools.wraps(funcion)
+    def envoltura(*args, **kwargs):
+        try:
+            return funcion(*args, **kwargs)
+        except IntegrityError as error:
+            codigo = getattr(error.orig, 'pgcode', None)
+            mensaje = _MENSAJES_INTEGRIDAD.get(
+                codigo, 'La base de datos rechazó la operación.')
+            raise ValueError(mensaje) from error
+    return envoltura
+
+
 def _siguiente_id(sesion: Session, modelo: Type[Base]) -> int:
     """Devuelve el máximo id de la tabla más uno."""
     maximo = sesion.scalar(select(func.max(modelo.id)))
@@ -332,6 +372,7 @@ class RepositorioDB(IRepositorio[T], Generic[T, M]):
         with self._conexion.transaccion() as sesion:
             return _siguiente_id(sesion, self.MODELO)
 
+    @_traducir_errores_db
     def crear(self, entidad: T) -> T:
         with self._conexion.transaccion() as sesion:
             if sesion.get(self.MODELO, entidad.id) is not None:
@@ -353,6 +394,7 @@ class RepositorioDB(IRepositorio[T], Generic[T, M]):
             modelos = sesion.scalars(self._consulta())
             return [self._a_entidad(m) for m in modelos]
 
+    @_traducir_errores_db
     def actualizar(self, entidad: T) -> T:
         with self._conexion.transaccion() as sesion:
             modelo = sesion.get(self.MODELO, entidad.id)
@@ -364,6 +406,7 @@ class RepositorioDB(IRepositorio[T], Generic[T, M]):
                 setattr(modelo, columna, valor)
         return entidad
 
+    @_traducir_errores_db
     def eliminar(self, id: int) -> bool:
         with self._conexion.transaccion() as sesion:
             modelo = sesion.get(self.MODELO, id)
@@ -502,6 +545,7 @@ class RepositorioStock(IRepositorioStock):
         with self._conexion.transaccion() as sesion:
             return _siguiente_id(sesion, StockModelo)
 
+    @_traducir_errores_db
     def crear(self, stock: Stock) -> Stock:
         with self._conexion.transaccion() as sesion:
             if self._buscar(sesion, stock.libro.id) is not None:
@@ -524,6 +568,7 @@ class RepositorioStock(IRepositorioStock):
         with self._conexion.transaccion() as sesion:
             return [_a_stock(m) for m in sesion.scalars(self._consulta())]
 
+    @_traducir_errores_db
     def actualizar(self, stock: Stock) -> Stock:
         with self._conexion.transaccion() as sesion:
             modelo = self._buscar(sesion, stock.libro.id)
@@ -534,6 +579,7 @@ class RepositorioStock(IRepositorioStock):
             modelo.cantidad = stock.cantidad
         return stock
 
+    @_traducir_errores_db
     def eliminar(self, libro_id: int) -> bool:
         with self._conexion.transaccion() as sesion:
             modelo = self._buscar(sesion, libro_id)
@@ -569,6 +615,7 @@ class RepositorioCotizacionDolar(IRepositorioCotizacionDolar):
         with self._conexion.transaccion() as sesion:
             return _siguiente_id(sesion, CotizacionDolarModelo)
 
+    @_traducir_errores_db
     def crear(self, cotizacion: CotizacionDolar) -> CotizacionDolar:
         with self._conexion.transaccion() as sesion:
             if self._buscar(sesion, cotizacion.tipo.id,
@@ -610,6 +657,7 @@ class RepositorioCotizacionDolar(IRepositorioCotizacionDolar):
             )
             return [_a_cotizacion(m) for m in sesion.scalars(consulta)]
 
+    @_traducir_errores_db
     def actualizar(self, cotizacion: CotizacionDolar) -> CotizacionDolar:
         with self._conexion.transaccion() as sesion:
             modelo = self._buscar(sesion, cotizacion.tipo.id,
@@ -623,6 +671,7 @@ class RepositorioCotizacionDolar(IRepositorioCotizacionDolar):
             modelo.valor_venta = cotizacion.valor_venta
         return cotizacion
 
+    @_traducir_errores_db
     def eliminar(self, tipo_id: int, fecha: datetime.date) -> bool:
         with self._conexion.transaccion() as sesion:
             modelo = self._buscar(sesion, tipo_id, fecha)
