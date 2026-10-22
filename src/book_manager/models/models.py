@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -98,7 +99,10 @@ class LibroModelo(Base):
     editorial: Mapped[EditorialModelo] = relationship(back_populates='libros')
     genero: Mapped[GeneroModelo] = relationship(back_populates='libros')
     precios: Mapped[List[PrecioModelo]] = relationship(back_populates='libro')
-    stock: Mapped[List[StockModelo]] = relationship(back_populates='libro')
+    # Relación 1 a 1: un libro tiene a lo sumo un registro de stock
+    stock: Mapped[Optional[StockModelo]] = relationship(
+        back_populates='libro', uselist=False
+    )
 
 
 class PrecioModelo(Base):
@@ -127,7 +131,7 @@ class StockModelo(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    libro_id: Mapped[int] = mapped_column(ForeignKey('libros.id'))
+    libro_id: Mapped[int] = mapped_column(ForeignKey('libros.id'), unique=True)
     cantidad: Mapped[int]
 
     libro: Mapped[LibroModelo] = relationship(back_populates='stock')
@@ -140,6 +144,8 @@ class CotizacionDolarModelo(Base):
     __table_args__ = (
         CheckConstraint('valor_compra >= 0', name='ck_cotiz_compra'),
         CheckConstraint('valor_venta >= 0', name='ck_cotiz_venta'),
+        # Una sola cotización por tipo de dólar y por día
+        UniqueConstraint('tipo_id', 'fecha', name='uq_cotiz_tipo_fecha'),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

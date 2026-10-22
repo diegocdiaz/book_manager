@@ -33,19 +33,22 @@
 - Definición de las tablas del sistema con sus tipos de datos y relaciones en models/models.py.
 - Restricciones para que precios, stock y cotizaciones no admitan valores negativos.
 - Función crear_tablas para generar las tablas en la base.
+- Se agrega la restricción única (tipo_id, fecha) en la tabla cotizaciones: hay una sola cotización por tipo de dólar y por día.
+- La relación libro-stock pasa a ser 1 a 1: se agrega unique en stock.libro_id y la relación LibroModelo.stock deja de ser una lista.
+- Las restricciones se aplican con ALTER TABLE a las tablas ya creadas en Supabase, porque create_all no modifica tablas que ya existen.
 
-[Ejercicio 03]
+### [Ejercicio 03]
 - Context manager transaccion() en ConexionDB para manejar las
   transacciones: hace commit si todo sale bien y rollback si hay un error.
 - La sesión se cierra siempre al terminar el bloque with.
 
-[Ejercicio 02]
+### [Ejercicio 02]
 - Creación de la clase ConexionDB en database/connection.py, que maneja la
   conexión a la base PostgreSQL de Supabase con SQLAlchemy.
 - La URL de conexión se lee de la variable de entorno DATABASE_URL.
 - Se agregan SQLAlchemy y psycopg2-binary a requirements.txt.
 
-[Ejercicio 01]
+### [Ejercicio 01]
 - Creación de la rama Sprint_2 a partir de la rama Sprint_1.
 - Nuevas carpetas database/ y models/ con los archivos connection.py y
   models.py, y la carpeta migrations/sql.
