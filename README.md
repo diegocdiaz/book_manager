@@ -20,5 +20,5 @@ permite gestionar el inventario, cotizar los libros según el valor del dólar y
 comparar precios con la competencia, guardando los datos en archivos csv.
 
 En este Sprint 2, partiendo del último push del Sprint 1, se migran todos los
-datos de los archivos a tablas de una base de datos relacional (SQLite) con
-SQLAlchemy, y se incorporan consultas a APIs externas.
+datos de los archivos a tablas de una base de datos relacional (PostgreSQL
+en Supabase) con SQLAlchemy, y se incorporan consultas a APIs externas.

@@ -10,7 +10,7 @@
 - Se agrega la carpeta exports/ al .gitignore.
 
 ### [Ejercicio 07]
-- Archivo .env con la URL de la API del dólar (API_URL) y la URL de conexión a la base (DATABASE_URL), que ConexionDB lee al crearse. Se versiona para que la cátedra pueda ejecutar el sistema.
+- Archivo .env con la URL de la API del dólar (API_URL). La URL de la base no se guarda ahí porque tiene la contraseña.
 - Función obtener_cotizaciones en ServicioCotizacionDolar: descarga las cotizaciones de la API y las registra en la base (si ya existe la del día, la actualiza).
 - Relación entre las casas de la API (oficial, blue, bolsa, etc.) y los tipos de cotización del sistema.
 - Se agregan requests y python-dotenv a requirements.txt.
@@ -54,7 +54,7 @@
 - Creación de la rama Sprint_2 a partir de la rama Sprint_1.
 - Nuevas carpetas database/ y models/ con los archivos connection.py y
   models.py, y la carpeta migrations/sql.
-- Creación del archivo .env con la configuración de la base de datos SQLite.
+- Creación del archivo .env con la configuración del sistema.
 - Actualización del README.md con el objetivo y el contexto del Sprint 2.
 
 ## Sprint 1
