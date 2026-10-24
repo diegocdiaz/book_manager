@@ -2,6 +2,13 @@
 
 ## Sprint 3
 
+### [Ejercicio 02]
+- Función cargar_desde_sql en migrations/migrations.py: carga los datos en la
+  base ejecutando en orden los archivos .sql de migrations/sql.
+- Todos los archivos se ejecutan en una sola transacción, y como los INSERT
+  usan ON CONFLICT DO NOTHING se puede ejecutar más de una vez sin duplicar
+  registros.
+
 ### [Ejercicio 01]
 - Creación de la rama Sprint_3 a partir de la rama Sprint_2.
 - Nuevas carpetas scraper/, para el scraper de Cúspide hecho con Scrapy, y

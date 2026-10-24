@@ -8,6 +8,9 @@ La función principal, migrar_datos, hace dos cosas con los CSV de cada tabla:
 Las tablas se procesan respetando las claves foráneas: primero las que no
 dependen de ninguna otra y después las que referencian a las anteriores.
 La migración se puede ejecutar más de una vez sin duplicar registros.
+
+La función cargar_desde_sql hace la carga a partir de los archivos .sql ya
+generados, sin pasar por los CSV.
 """
 
 import csv
@@ -208,6 +211,46 @@ def migrar_datos(carpeta_csvs: str, carpeta_sqls: str,
                 sesion.flush()
                 print(f'{tabla}: {len(filas)} registros migrados')
             _reiniciar_secuencias(sesion)
+    finally:
+        if conexion_propia:
+            conexion.cerrar()
+
+
+def cargar_desde_sql(carpeta_sqls: str,
+                     conexion: Optional[ConexionDB] = None) -> None:
+    """Carga los datos en la base ejecutando los archivos .sql de la carpeta.
+
+    Los archivos se ejecutan en orden de nombre (01_generos.sql,
+    02_editoriales.sql, ...), que es el orden de las claves foráneas. Todos
+    se ejecutan en una sola transacción: si uno falla no queda nada cargado.
+    Como los INSERT usan ON CONFLICT DO NOTHING, se puede ejecutar más de
+    una vez sin duplicar registros.
+
+    Args:
+        carpeta_sqls (str): Carpeta con los archivos .sql a ejecutar.
+        conexion (Optional[ConexionDB]): Conexión a usar. Si no se indica,
+            se crea una con la variable de entorno DATABASE_URL.
+
+    Raises:
+        FileNotFoundError: Si la carpeta no tiene archivos .sql.
+    """
+    archivos = sorted(Path(carpeta_sqls).glob('*.sql'))
+    if not archivos:
+        raise FileNotFoundError(f'No hay archivos .sql en {carpeta_sqls}.')
+
+    conexion_propia = conexion is None
+    conexion = conexion or ConexionDB()
+    try:
+        # Los .sql solo tienen los INSERT: las tablas se crean antes
+        crear_tablas(conexion.engine)
+        with conexion.transaccion() as sesion:
+            for archivo in archivos:
+                # exec_driver_sql manda el texto tal cual a la base, sin
+                # interpretar los ':' de los datos como parámetros
+                sesion.connection().exec_driver_sql(
+                    archivo.read_text(encoding='utf-8')
+                )
+                print(f'{archivo.name}: ejecutado')
     finally:
         if conexion_propia:
             conexion.cerrar()
