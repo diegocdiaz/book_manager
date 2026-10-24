@@ -1,5 +1,14 @@
 # Changelog
 
+## Sprint 3
+
+### [Ejercicio 01]
+- Creación de la rama Sprint_3 a partir de la rama Sprint_2.
+- Nuevas carpetas scraper/, para el scraper de Cúspide hecho con Scrapy, y
+  reportes/, donde se guardan los reportes en Excel.
+- Se agregan scrapy y openpyxl a requirements.txt.
+- Actualización del README.md con el objetivo y el contexto del Sprint 3.
+
 ## Sprint 2
 
 ### [Ejercicio 08]

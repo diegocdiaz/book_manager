@@ -1,12 +1,13 @@
 # Book Manager
 
-## Sprint actual: Sprint 2
+## Sprint actual: Sprint 3
 
 ## Objetivo
-Ampliar el sistema de gestión de inventario de la librería para que persista
-sus datos en una base de datos relacional usando el ORM SQLAlchemy,
-consolidando el manejo de bases de datos, la normalización, la conexión segura
-y la carga inicial de datos.
+Ampliar el sistema de gestión de inventario de la librería para que obtenga
+datos de la web: extraer con Scrapy los precios de los libros del catálogo en
+el sitio de Cúspide, compararlos con los precios internos, generar alertas y
+reportes en Excel, y registrar en una tabla de auditoría cada operación del
+sistema.
 
 ## Introducción y contexto
 Una librería con venta al público necesita modernizar su sistema de gestión de
@@ -19,6 +20,11 @@ En el Sprint 1 se desarrolló una aplicación de consola (CLI) en Python que
 permite gestionar el inventario, cotizar los libros según el valor del dólar y
 comparar precios con la competencia, guardando los datos en archivos csv.
 
-En este Sprint 2, partiendo del último push del Sprint 1, se migran todos los
-datos de los archivos a tablas de una base de datos relacional (PostgreSQL
-en Supabase) con SQLAlchemy, y se incorporan consultas a APIs externas.
+En el Sprint 2 se migraron los datos a una base de datos relacional
+(PostgreSQL en Supabase) con SQLAlchemy y se incorporó la consulta de las
+cotizaciones del dólar a una API externa.
+
+En este Sprint 3, partiendo del último push del Sprint 2, se obtienen los
+precios de los competidores (librerías con venta online) para poder
+compararse con ellos y competir de forma más informada. Solo se buscan en
+Cúspide los libros que están en el catálogo propio.
