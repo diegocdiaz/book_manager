@@ -9,6 +9,6 @@ requests>=2.31
 # Lectura de la configuración del archivo .env
 python-dotenv>=1.0
 # Scraping de los precios del sitio de Cúspide
-scrapy>=2.11
+scrapy>=2.14
 # Generación de los reportes en Excel
 openpyxl>=3.1

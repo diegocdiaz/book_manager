@@ -2,6 +2,23 @@
 
 ## Sprint 3
 
+### [Ejercicio 03]
+- Scraper CuspideSpider hecho con Scrapy en la carpeta scraper/: por cada
+  libro del catálogo busca su título en Cúspide y entra a los 10 primeros
+  resultados. Solo se buscan libros que están en nuestra base.
+- De cada ficha se extrae el precio en pesos y en dólares, la url de la
+  imagen, las formas de pago y la descripción, además del título y el ISBN
+  del sitio para poder compararlo con el libro buscado.
+- Loader (loaders.py) que limpia los textos, pasa los precios a número y
+  arma la lista de formas de pago.
+- Pipelines (pipelines.py): uno descarta los resultados sin precio y otro
+  los guarda en la base.
+- Nueva tabla precios_web (PrecioWebModelo) con los datos extraídos y la
+  fecha de extracción de cada ejecución.
+- El scraper se ejecuta desde la carpeta src con
+  `python -m book_manager.scraper.ejecutar`.
+- Se pide scrapy>=2.14 en requirements.txt.
+
 ### [Ejercicio 02]
 - Función cargar_desde_sql en migrations/migrations.py: carga los datos en la
   base ejecutando en orden los archivos .sql de migrations/sql.

@@ -14,10 +14,12 @@ from typing import List, Optional
 from sqlalchemy import (
     CheckConstraint,
     Date,
+    DateTime,
     Engine,
     ForeignKey,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import (
@@ -103,6 +105,9 @@ class LibroModelo(Base):
     stock: Mapped[Optional[StockModelo]] = relationship(
         back_populates='libro', uselist=False
     )
+    precios_web: Mapped[List[PrecioWebModelo]] = relationship(
+        back_populates='libro'
+    )
 
 
 class PrecioModelo(Base):
@@ -157,6 +162,31 @@ class CotizacionDolarModelo(Base):
     tipo: Mapped[TipoCotizacionModelo] = relationship(
         back_populates='cotizaciones'
     )
+
+
+class PrecioWebModelo(Base):
+    """Tabla con los datos de los libros extraídos del sitio de Cúspide.
+
+    Cada fila es un resultado de la búsqueda por título de uno de nuestros
+    libros. Se guarda la fecha de extracción para poder comparar los precios
+    de cada ejecución del scraper.
+    """
+
+    __tablename__ = 'precios_web'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    libro_id: Mapped[int] = mapped_column(ForeignKey('libros.id'))
+    titulo: Mapped[str] = mapped_column(String(255))
+    isbn: Mapped[Optional[str]] = mapped_column(String(20))
+    url: Mapped[str] = mapped_column(String(500))
+    precio: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    precio_usd: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2))
+    url_imagen: Mapped[Optional[str]] = mapped_column(String(500))
+    formas_pago: Mapped[Optional[str]] = mapped_column(Text)
+    descripcion: Mapped[Optional[str]] = mapped_column(Text)
+    fecha_extraccion: Mapped[datetime.datetime] = mapped_column(DateTime)
+
+    libro: Mapped[LibroModelo] = relationship(back_populates='precios_web')
 
 
 def crear_tablas(engine: Engine) -> None:
