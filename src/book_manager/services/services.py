@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import csv
 import datetime
+import difflib
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,6 +27,7 @@ from book_manager.entities.entities import (
     Libro,
     Moneda,
     Precio,
+    PrecioWeb,
     Stock,
     TipoCotizacion,
 )
@@ -35,6 +39,7 @@ from book_manager.repositories.repositories import (
     RepositorioLibro,
     RepositorioMoneda,
     RepositorioPrecio,
+    RepositorioPrecioWeb,
     RepositorioStock,
     RepositorioTipoCotizacion,
 )
@@ -722,6 +727,206 @@ class ServicioCotizador:
         }
 
 
+# Columnas del CSV de alertas de precios
+ENCABEZADOS_ALERTAS = (
+    'libro_id', 'isbn', 'titulo', 'titulo_web', 'precio_interno',
+    'precio_web', 'diferencia', 'porcentaje', 'alerta', 'fecha_extraccion',
+    'url',
+)
+
+# Parecido minimo (de 0 a 1) entre dos titulos para tomarlos como el mismo
+# libro
+SIMILITUD_MINIMA = 0.8
+
+# Carpeta donde se guardan los reportes generados (CSV de alertas, Excel)
+CARPETA_REPORTES = Path(__file__).resolve().parents[1] / 'reportes'
+
+
+class ServicioComparacionPrecios:
+    """Compara nuestros precios con los que el scraper saco de Cuspide.
+
+    El scraper guarda hasta 10 resultados por cada libro buscado. Para
+    cada libro se elige, entre los resultados de la ultima ejecucion, el
+    que tiene el titulo mas parecido al nuestro (o el mismo ISBN) y se
+    calcula la diferencia de precio en pesos.
+    """
+
+    def __init__(self, repositorio: RepositorioPrecioWeb,
+                 servicio_libro: ServicioLibro,
+                 cotizador: ServicioCotizador,
+                 servicio_tipo: ServicioTipoCotizacion) -> None:
+        self._repositorio = repositorio
+        self._servicio_libro = servicio_libro
+        self._cotizador = cotizador
+        self._servicio_tipo = servicio_tipo
+
+    @staticmethod
+    def _normalizar(texto: str) -> str:
+        """Pasa un titulo a minusculas, sin tildes ni signos."""
+        sin_tildes = unicodedata.normalize('NFKD', texto)
+        sin_tildes = ''.join(c for c in sin_tildes
+                             if not unicodedata.combining(c))
+        return re.sub(r'[^a-z0-9]+', ' ', sin_tildes.lower()).strip()
+
+    @classmethod
+    def similitud(cls, titulo: str, titulo_web: str) -> float:
+        """Dice cuanto se parecen dos titulos, de 0 (nada) a 1 (iguales).
+
+        El buscador del sitio no entiende los subtitulos, por eso tambien
+        se compara solo la parte anterior a los dos puntos y se toma el
+        mejor resultado.
+        """
+        propio = cls._normalizar(titulo)
+        propio_corto = cls._normalizar(titulo.split(':')[0])
+        web = cls._normalizar(titulo_web)
+        web_corto = cls._normalizar(titulo_web.split(':')[0])
+        pares = ((propio, web), (propio_corto, web), (propio_corto, web_corto))
+        return max(difflib.SequenceMatcher(None, a, b).ratio()
+                   for a, b in pares)
+
+    def _elegir_resultado(self, libro: Libro,
+                          resultados: List[PrecioWeb]) -> Optional[PrecioWeb]:
+        """Devuelve el resultado del sitio que corresponde al libro."""
+        mejor, mejor_puntaje = None, 0.0
+        for resultado in resultados:
+            if resultado.libro.id != libro.id:
+                continue
+            if resultado.isbn and resultado.isbn == libro.isbn:
+                puntaje = 1.0
+            else:
+                puntaje = self.similitud(libro.titulo, resultado.titulo)
+            if puntaje > mejor_puntaje:
+                mejor, mejor_puntaje = resultado, puntaje
+        return mejor if mejor_puntaje >= SIMILITUD_MINIMA else None
+
+    def _id_tipo_dolar(self, tipo_id: Optional[int]) -> int:
+        """Devuelve el tipo de dolar a usar (por defecto, el oficial)."""
+        if tipo_id is not None:
+            return tipo_id
+        tipos = self._servicio_tipo.listar()
+        if not tipos:
+            raise ValueError('No hay tipos de cotizacion cargados.')
+        for tipo in tipos:
+            if tipo.nombre.lower() == 'oficial':
+                return tipo.id
+        return tipos[0].id
+
+    def comparar(self, tipo_id: Optional[int] = None) -> List[Dict]:
+        """Compara el precio de cada libro con el de la ultima extraccion.
+
+        Args:
+            tipo_id (Optional[int]): Tipo de dolar con el que se pasan a
+                pesos los libros que tienen precio solo en USD. Si no se
+                indica se usa el oficial.
+
+        Returns:
+            List[Dict]: Una fila por cada libro con precio. Si no se
+                encontro el libro en el sitio, precio_web, diferencia y
+                porcentaje quedan en None.
+
+        Raises:
+            ValueError: Si el scraper todavia no se ejecuto.
+        """
+        resultados = self._repositorio.leer_ultima_extraccion()
+        if not resultados:
+            raise ValueError('Todavia no se ejecuto el scraper: no hay '
+                             'precios de la web para comparar.')
+        fecha = resultados[0].fecha_extraccion
+        internos = {fila['libro'].id: fila['ars'] for fila in
+                    self._cotizador.cotizar_todos(
+                        self._id_tipo_dolar(tipo_id))}
+
+        filas = []
+        for libro in self._servicio_libro.listar():
+            interno = internos.get(libro.id)
+            if interno is None:
+                continue
+            web = self._elegir_resultado(libro, resultados)
+            fila = {'libro': libro, 'precio_interno': interno,
+                    'titulo_web': None, 'url': None, 'precio_web': None,
+                    'diferencia': None, 'porcentaje': None,
+                    'fecha_extraccion': fecha}
+            if web is not None:
+                diferencia = round(interno - web.precio, 2)
+                fila.update(
+                    titulo_web=web.titulo, url=web.url,
+                    precio_web=web.precio, diferencia=diferencia,
+                    porcentaje=(round(diferencia / web.precio * 100, 2)
+                                if web.precio else None))
+            filas.append(fila)
+        return filas
+
+    def generar_alertas(self, minimo: float,
+                        tipo_id: Optional[int] = None) -> List[Dict]:
+        """Devuelve los libros cuya diferencia de precio llega al minimo.
+
+        Args:
+            minimo (float): Diferencia minima en pesos (sin importar el
+                signo) para que un libro genere una alerta.
+            tipo_id (Optional[int]): Tipo de dolar para pasar a pesos.
+
+        Returns:
+            List[Dict]: Las filas de comparar() que son alerta, con la
+                clave 'alerta' que dice si somos mas caros o mas baratos.
+
+        Raises:
+            ValueError: Si el minimo es negativo o el scraper no se ejecuto.
+        """
+        if minimo < 0:
+            raise ValueError('La diferencia minima no puede ser negativa.')
+        alertas = []
+        for fila in self.comparar(tipo_id):
+            if fila['diferencia'] is None or abs(fila['diferencia']) < minimo:
+                continue
+            if fila['diferencia'] > 0:
+                fila['alerta'] = 'Somos mas caros'
+            elif fila['diferencia'] < 0:
+                fila['alerta'] = 'Somos mas baratos'
+            else:
+                fila['alerta'] = 'Mismo precio'
+            alertas.append(fila)
+        return alertas
+
+    @staticmethod
+    def ruta_alertas_por_defecto() -> Path:
+        """Devuelve la ruta del CSV de alertas, con la fecha y hora."""
+        momento = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        return CARPETA_REPORTES / f'alertas_{momento}.csv'
+
+    def exportar_alertas_csv(self, minimo: float, ruta: Path,
+                             tipo_id: Optional[int] = None) -> int:
+        """Guarda en un CSV las alertas de precio.
+
+        El archivo se genera siempre, aunque no haya ninguna alerta (en ese
+        caso solo tiene los encabezados).
+
+        Args:
+            minimo (float): Diferencia minima en pesos para alertar.
+            ruta (Path): Archivo CSV a generar. Si la carpeta no existe se
+                crea.
+            tipo_id (Optional[int]): Tipo de dolar para pasar a pesos.
+
+        Returns:
+            int: Cantidad de alertas escritas.
+        """
+        alertas = self.generar_alertas(minimo, tipo_id)
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        # utf-8-sig agrega una marca al inicio para que Excel muestre bien
+        # las tildes al abrir el archivo
+        with ruta.open('w', newline='', encoding='utf-8-sig') as archivo:
+            escritor = csv.writer(archivo)
+            escritor.writerow(ENCABEZADOS_ALERTAS)
+            escritor.writerows(
+                (f['libro'].id, f['libro'].isbn, f['libro'].titulo,
+                 f['titulo_web'], f['precio_interno'], f['precio_web'],
+                 f['diferencia'], f['porcentaje'], f['alerta'],
+                 f['fecha_extraccion'].isoformat(timespec='seconds'),
+                 f['url'])
+                for f in alertas
+            )
+        return len(alertas)
+
+
 class ServiciosLibreria:
     """Agrupa todos los servicios en un solo objeto.
 
@@ -738,7 +943,8 @@ class ServiciosLibreria:
                  precios: ServicioPrecio,
                  stock: ServicioStock,
                  cotizaciones: ServicioCotizacionDolar,
-                 cotizador: ServicioCotizador) -> None:
+                 cotizador: ServicioCotizador,
+                 comparador: ServicioComparacionPrecios) -> None:
         self.generos = generos
         self.editoriales = editoriales
         self.monedas = monedas
@@ -748,3 +954,4 @@ class ServiciosLibreria:
         self.stock = stock
         self.cotizaciones = cotizaciones
         self.cotizador = cotizador
+        self.comparador = comparador

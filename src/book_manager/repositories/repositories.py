@@ -33,6 +33,7 @@ from book_manager.entities.entities import (
     Libro,
     Moneda,
     Precio,
+    PrecioWeb,
     Stock,
     TipoCotizacion,
 )
@@ -44,6 +45,7 @@ from book_manager.models.models import (
     LibroModelo,
     MonedaModelo,
     PrecioModelo,
+    PrecioWebModelo,
     StockModelo,
     TipoCotizacionModelo,
 )
@@ -277,6 +279,13 @@ def _a_precio(modelo: PrecioModelo) -> Precio:
 def _a_stock(modelo: StockModelo) -> Stock:
     """Convierte una fila de la tabla stock en la entidad Stock."""
     return Stock(modelo.id, _a_libro(modelo.libro), modelo.cantidad)
+
+
+def _a_precio_web(modelo: PrecioWebModelo) -> PrecioWeb:
+    """Convierte una fila de precios_web en la entidad PrecioWeb."""
+    return PrecioWeb(modelo.id, _a_libro(modelo.libro), modelo.titulo,
+                     modelo.isbn, modelo.url, float(modelo.precio),
+                     modelo.fecha_extraccion)
 
 
 def _a_cotizacion(modelo: CotizacionDolarModelo) -> CotizacionDolar:
@@ -680,3 +689,38 @@ class RepositorioCotizacionDolar(IRepositorioCotizacionDolar):
             sesion.delete(modelo)
         return True
 
+
+class IRepositorioPrecioWeb(abc.ABC):
+    """Interfaz del repositorio de los precios extraídos del sitio."""
+
+    @abc.abstractmethod
+    def leer_ultima_extraccion(self) -> List[PrecioWeb]:
+        """Devuelve los precios de la ejecución más reciente del scraper.
+
+        Returns:
+            List[PrecioWeb]: Los resultados que comparten la fecha de
+                extracción más nueva. Vacía si el scraper nunca se ejecutó.
+        """
+
+
+class RepositorioPrecioWeb(IRepositorioPrecioWeb):
+    """Lectura de la tabla precios_web, que llena el scraper."""
+
+    def __init__(self, conexion: ConexionDB) -> None:
+        self._conexion = conexion
+
+    def leer_ultima_extraccion(self) -> List[PrecioWeb]:
+        with self._conexion.transaccion() as sesion:
+            ultima = sesion.scalar(
+                select(func.max(PrecioWebModelo.fecha_extraccion)))
+            if ultima is None:
+                return []
+            libro = selectinload(PrecioWebModelo.libro)
+            consulta = (
+                select(PrecioWebModelo)
+                .options(libro.selectinload(LibroModelo.editorial),
+                         libro.selectinload(LibroModelo.genero))
+                .where(PrecioWebModelo.fecha_extraccion == ultima)
+                .order_by(PrecioWebModelo.libro_id, PrecioWebModelo.id)
+            )
+            return [_a_precio_web(m) for m in sesion.scalars(consulta)]

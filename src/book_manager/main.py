@@ -21,10 +21,12 @@ from book_manager.repositories.repositories import (
     RepositorioLibro,
     RepositorioMoneda,
     RepositorioPrecio,
+    RepositorioPrecioWeb,
     RepositorioStock,
     RepositorioTipoCotizacion,
 )
 from book_manager.services.services import (
+    ServicioComparacionPrecios,
     ServicioCotizacionDolar,
     ServicioCotizador,
     ServicioEditorial,
@@ -72,6 +74,7 @@ def armar_servicios(conexion: ConexionDB) -> ServiciosLibreria:
     repo_precio = RepositorioPrecio(conexion)
     repo_stock = RepositorioStock(conexion)
     repo_cotizacion = RepositorioCotizacionDolar(conexion)
+    repo_precio_web = RepositorioPrecioWeb(conexion)
 
     generos = ServicioGenero(repo_genero, repo_libro)
     editoriales = ServicioEditorial(repo_editorial, repo_libro)
@@ -83,9 +86,12 @@ def armar_servicios(conexion: ConexionDB) -> ServiciosLibreria:
     stock = ServicioStock(repo_stock, libros)
     cotizaciones = ServicioCotizacionDolar(repo_cotizacion, tipos_cotizacion)
     cotizador = ServicioCotizador(libros, precios, cotizaciones)
+    comparador = ServicioComparacionPrecios(repo_precio_web, libros, cotizador,
+                                            tipos_cotizacion)
 
     return ServiciosLibreria(generos, editoriales, monedas, tipos_cotizacion,
-                             libros, precios, stock, cotizaciones, cotizador)
+                             libros, precios, stock, cotizaciones, cotizador,
+                             comparador)
 
 
 def preparar_servicios(

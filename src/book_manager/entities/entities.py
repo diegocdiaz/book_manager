@@ -2,7 +2,8 @@
 
 Este módulo contiene las clases que representan las entidades principales
 del sistema de gestión de inventario de una librería: Libro, Genero,
-Editorial, Moneda, TipoCotizacion, Precio, Stock y CotizacionDolar.
+Editorial, Moneda, TipoCotizacion, Precio, Stock, CotizacionDolar y
+PrecioWeb.
 """
 
 from __future__ import annotations
@@ -405,4 +406,77 @@ class CotizacionDolar(EntidadBase):
             f"{self.tipo} ({self.fecha}): "
             f"compra {self.valor_compra} / venta {self.valor_venta}"
         )
-        
+
+
+class PrecioWeb(EntidadBase):
+    """Representa el precio de un libro encontrado en el sitio de Cúspide.
+
+    Es un resultado de la búsqueda que hizo el scraper por el título de uno
+    de nuestros libros.
+
+    Attributes:
+        libro (Libro): Libro nuestro por el que se hizo la búsqueda.
+        titulo (str): Título con el que aparece en el sitio.
+        isbn (Optional[str]): ISBN que informa el sitio, si lo tiene.
+        url (str): Dirección de la ficha del libro en el sitio.
+        precio (float): Precio en pesos en el sitio.
+        fecha_extraccion (datetime.datetime): Momento en que se obtuvo.
+    """
+
+    def __init__(self, id_: int, libro: Libro, titulo: str,
+                 isbn: Optional[str], url: str, precio: float,
+                 fecha_extraccion: datetime.datetime) -> None:
+        super().__init__(id_)
+        self.libro = libro
+        self.titulo = titulo
+        self.isbn = isbn
+        self.url = url
+        self.precio = precio
+        self.fecha_extraccion = fecha_extraccion
+
+    @property
+    def libro(self) -> Libro:
+        """Libro: Libro nuestro por el que se hizo la búsqueda."""
+        return self._libro
+
+    @libro.setter
+    def libro(self, valor: Libro) -> None:
+        if not isinstance(valor, Libro):
+            raise TypeError("libro debe ser una instancia de Libro.")
+        self._libro = valor
+
+    @property
+    def titulo(self) -> str:
+        """str: Título del libro en el sitio."""
+        return self._titulo
+
+    @titulo.setter
+    def titulo(self, valor: str) -> None:
+        if not valor or not valor.strip():
+            raise ValueError("El título del sitio no puede estar vacío.")
+        self._titulo = valor.strip()
+
+    @property
+    def precio(self) -> float:
+        """float: Precio en pesos en el sitio."""
+        return self._precio
+
+    @precio.setter
+    def precio(self, valor: float) -> None:
+        if valor < 0:
+            raise ValueError("El precio web no puede ser negativo.")
+        self._precio = float(valor)
+
+    @property
+    def fecha_extraccion(self) -> datetime.datetime:
+        """datetime.datetime: Momento en que se extrajo el precio."""
+        return self._fecha_extraccion
+
+    @fecha_extraccion.setter
+    def fecha_extraccion(self, valor: datetime.datetime) -> None:
+        if not isinstance(valor, datetime.datetime):
+            raise TypeError("fecha_extraccion debe ser un datetime.")
+        self._fecha_extraccion = valor
+
+    def __str__(self) -> str:
+        return f"{self.titulo}: {self.precio} ({self.fecha_extraccion})"

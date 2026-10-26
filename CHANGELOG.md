@@ -2,6 +2,11 @@
 
 ## Sprint 3
 
+### [Ejercicio 04]
+- Nueva entidad PrecioWeb y RepositorioPrecioWeb, que lee de la tabla precios_web los precios de la última ejecución del scraper.
+- ServicioComparacionPrecios: empareja cada libro con el resultado de Cúspide de título más parecido (o con el mismo ISBN) y calcula la diferencia en pesos contra nuestro precio.
+- Alertas: los libros cuya diferencia llega al mínimo que ingresa el usuario se guardan en un CSV en reportes/, con la fecha y hora en el nombre. El archivo se genera siempre, aunque no haya alertas.
+
 ### [Ejercicio 03]
 - Scraper CuspideSpider hecho con Scrapy en la carpeta scraper/: por cada
   libro del catálogo busca su título en Cúspide y entra a los 10 primeros
