@@ -7,3 +7,7 @@ src/book_manager/data/
 exports/
 # Carpetas que crea el hook de Claude Code
 .claude-flow/
+
+# Reportes generados por el programa (Excel y CSV de alertas)
+src/book_manager/reportes/*
+!src/book_manager/reportes/.gitkeep

@@ -797,13 +797,22 @@ class ServicioComparacionPrecios:
         for resultado in resultados:
             if resultado.libro.id != libro.id:
                 continue
-            if resultado.isbn and resultado.isbn == libro.isbn:
-                puntaje = 1.0
+            if self._mismo_isbn(libro.isbn, resultado.isbn):
+                # el ISBN identifica la edicion: gana siempre sobre el
+                # titulo (puede haber varias ediciones con el mismo titulo)
+                puntaje = 2.0
             else:
                 puntaje = self.similitud(libro.titulo, resultado.titulo)
             if puntaje > mejor_puntaje:
                 mejor, mejor_puntaje = resultado, puntaje
         return mejor if mejor_puntaje >= SIMILITUD_MINIMA else None
+
+    @staticmethod
+    def _mismo_isbn(isbn: Optional[str], isbn_web: Optional[str]) -> bool:
+        """Dice si dos ISBN son iguales, sin tener en cuenta los guiones."""
+        if not isbn or not isbn_web:
+            return False
+        return re.sub(r'\D', '', isbn) == re.sub(r'\D', '', isbn_web)
 
     def _id_tipo_dolar(self, tipo_id: Optional[int]) -> int:
         """Devuelve el tipo de dolar a usar (por defecto, el oficial)."""
