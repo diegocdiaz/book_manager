@@ -1,6 +1,10 @@
 # Changelog
 
 ## Sprint 3
+### [Ejercicio 05]
+- ServicioComparacionPrecios.exportar_excel genera un reporte .xlsx en reportes/ con las columnas Libro, Precio interno, Precio web, Diferencia y Fecha de extracción, con la fecha y hora en el nombre del archivo.
+- El reporte tiene un título y la fecha de la extracción arriba de la tabla.
+- Los libros que no se encontraron en el sitio quedan con el precio web y la diferencia vacíos.
 
 ### [Ejercicio 04]
 - Nueva entidad PrecioWeb y RepositorioPrecioWeb, que lee de la tabla precios_web los precios de la última ejecución del scraper.

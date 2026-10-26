@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from book_manager.entities.entities import (
     CotizacionDolar,
@@ -738,6 +741,9 @@ ENCABEZADOS_ALERTAS = (
 # libro
 SIMILITUD_MINIMA = 0.8
 
+# Columnas del reporte en Excel (en este orden)
+ENCABEZADOS_EXCEL = ['Libro', 'Precio interno', 'Precio web', 'Diferencia',
+                     'Fecha de extracción']
 # Carpeta donde se guardan los reportes generados (CSV de alertas, Excel)
 CARPETA_REPORTES = Path(__file__).resolve().parents[1] / 'reportes'
 
@@ -925,6 +931,81 @@ class ServicioComparacionPrecios:
                 for f in alertas
             )
         return len(alertas)
+
+    @staticmethod
+    def ruta_excel_por_defecto() -> Path:
+        """Devuelve la ruta del reporte en Excel, con la fecha y hora."""
+        momento = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        return CARPETA_REPORTES / f'comparacion_precios_{momento}.xlsx'
+
+    def exportar_excel(self, ruta: Path,
+                       tipo_id: Optional[int] = None) -> int:
+        """Guarda en un Excel la comparacion de precios de todos los libros.
+
+        Columnas: Libro, Precio interno, Precio web, Diferencia y Fecha de
+        extraccion. Los libros que no se encontraron en el sitio quedan con
+        el precio web y la diferencia vacios.
+
+        Args:
+            ruta (Path): Archivo .xlsx a generar. Si la carpeta no existe se
+                crea.
+            tipo_id (Optional[int]): Tipo de dolar para pasar a pesos.
+
+        Returns:
+            int: Cantidad de libros escritos en el reporte.
+
+        Raises:
+            ValueError: Si el scraper todavia no se ejecuto.
+        """
+        filas = self.comparar(tipo_id)
+        libro_excel = Workbook()
+        hoja = libro_excel.active
+        hoja.title = 'Comparación de precios'
+
+        # titulo del reporte (filas 1 y 2), una fila en blanco y los
+        # encabezados de la tabla en la fila 4
+        hoja.merge_cells('A1:E1')
+        hoja['A1'] = 'Comparación de precios: Book Manager vs. Cúspide'
+        hoja['A1'].font = Font(bold=True, size=16, color='1F4E78')
+        hoja['A1'].alignment = Alignment(horizontal='center')
+        hoja.merge_cells('A2:E2')
+        hoja['A2'] = ('Precios de la extracción del '
+                      + filas[0]['fecha_extraccion'].strftime('%d/%m/%Y %H:%M')
+                      + ' (diferencia en pesos: precio interno - precio web)')
+        hoja['A2'].font = Font(italic=True, color='595959')
+        hoja['A2'].alignment = Alignment(horizontal='center')
+
+        fila_encabezado = 4
+        hoja.append([])
+        hoja.append(ENCABEZADOS_EXCEL)
+        for celda in hoja[fila_encabezado]:
+            celda.font = Font(bold=True, color='FFFFFF')
+            celda.fill = PatternFill('solid', fgColor='1F4E78')
+            celda.alignment = Alignment(horizontal='center')
+
+        for f in filas:
+            hoja.append([f['libro'].titulo, f['precio_interno'],
+                         f['precio_web'], f['diferencia'],
+                         f['fecha_extraccion']])
+        for fila in hoja.iter_rows(min_row=fila_encabezado + 1):
+            for celda in fila[1:4]:
+                celda.number_format = '#,##0.00'
+            fila[4].number_format = 'dd/mm/yyyy hh:mm'
+
+        for numero, ancho in enumerate((50, 16, 16, 16, 22), start=1):
+            hoja.column_dimensions[get_column_letter(numero)].width = ancho
+        hoja.freeze_panes = f'A{fila_encabezado + 1}'
+        hoja.auto_filter.ref = (f'A{fila_encabezado}:E'
+                                f'{fila_encabezado + len(filas)}')
+
+        # para que al imprimir entren todas las columnas en una hoja
+        hoja.page_setup.orientation = 'landscape'
+        hoja.sheet_properties.pageSetUpPr.fitToPage = True
+        hoja.page_setup.fitToHeight = 0
+
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        libro_excel.save(ruta)
+        return len(filas)
 
 
 class ServiciosLibreria:
