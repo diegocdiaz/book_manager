@@ -189,6 +189,17 @@ class PrecioWebModelo(Base):
     libro: Mapped[LibroModelo] = relationship(back_populates='precios_web')
 
 
+class AuditoriaModelo(Base):
+    """Tabla de auditoría: un registro por cada operación del sistema."""
+
+    __tablename__ = 'auditoria'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    accion: Mapped[str] = mapped_column(String(100))
+    fecha: Mapped[datetime.datetime] = mapped_column(DateTime)
+    detalles: Mapped[Optional[str]] = mapped_column(Text)
+
+
 def crear_tablas(engine: Engine) -> None:
     """Crea en la base las tablas definidas que todavía no existan.
 

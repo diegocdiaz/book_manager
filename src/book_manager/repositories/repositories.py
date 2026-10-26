@@ -26,6 +26,7 @@ from sqlalchemy.sql.base import ExecutableOption
 
 from book_manager.database.connection import ConexionDB
 from book_manager.entities.entities import (
+    Auditoria,
     CotizacionDolar,
     Editorial,
     EntidadBase,
@@ -38,6 +39,7 @@ from book_manager.entities.entities import (
     TipoCotizacion,
 )
 from book_manager.models.models import (
+    AuditoriaModelo,
     Base,
     CotizacionDolarModelo,
     EditorialModelo,
@@ -288,6 +290,11 @@ def _a_precio_web(modelo: PrecioWebModelo) -> PrecioWeb:
                      modelo.fecha_extraccion)
 
 
+def _a_auditoria(modelo: AuditoriaModelo) -> Auditoria:
+    """Convierte una fila de la tabla auditoria en la entidad Auditoria."""
+    return Auditoria(modelo.id, modelo.accion, modelo.fecha, modelo.detalles)
+
+
 def _a_cotizacion(modelo: CotizacionDolarModelo) -> CotizacionDolar:
     """Convierte una fila de la tabla cotizaciones en CotizacionDolar."""
     return CotizacionDolar(modelo.id, _a_tipo(modelo.tipo), modelo.fecha,
@@ -499,6 +506,34 @@ class RepositorioLibro(RepositorioDB[Libro, LibroModelo]):
                 self._consulta().where(LibroModelo.isbn == isbn.strip())
             )
             return None if modelo is None else _a_libro(modelo)
+
+
+class RepositorioAuditoria(RepositorioDB[Auditoria, AuditoriaModelo]):
+    """Persistencia de los registros de auditoría (tabla auditoria)."""
+
+    MODELO = AuditoriaModelo
+
+    def _a_entidad(self, modelo: AuditoriaModelo) -> Auditoria:
+        return _a_auditoria(modelo)
+
+    def _columnas(self, entidad: Auditoria) -> Dict[str, Any]:
+        return {'accion': entidad.accion, 'fecha': entidad.fecha,
+                'detalles': entidad.detalles}
+
+    def leer_ultimos(self, cantidad: int) -> List[Auditoria]:
+        """Devuelve los registros más recientes, del más nuevo al más viejo.
+
+        Args:
+            cantidad (int): Cantidad máxima de registros a devolver.
+
+        Returns:
+            List[Auditoria]: Los últimos registros de la auditoría.
+        """
+        with self._conexion.transaccion() as sesion:
+            consulta = (select(AuditoriaModelo)
+                        .order_by(AuditoriaModelo.id.desc())
+                        .limit(cantidad))
+            return [_a_auditoria(m) for m in sesion.scalars(consulta)]
 
 
 class RepositorioPrecio(RepositorioDB[Precio, PrecioModelo]):

@@ -2,8 +2,8 @@
 
 Este módulo contiene las clases que representan las entidades principales
 del sistema de gestión de inventario de una librería: Libro, Genero,
-Editorial, Moneda, TipoCotizacion, Precio, Stock, CotizacionDolar y
-PrecioWeb.
+Editorial, Moneda, TipoCotizacion, Precio, Stock, CotizacionDolar,
+PrecioWeb y Auditoria.
 """
 
 from __future__ import annotations
@@ -480,3 +480,57 @@ class PrecioWeb(EntidadBase):
 
     def __str__(self) -> str:
         return f"{self.titulo}: {self.precio} ({self.fecha_extraccion})"
+
+
+class Auditoria(EntidadBase):
+    """Representa un registro de la auditoría del sistema.
+
+    Cada operación del sistema (altas, modificaciones, bajas, reportes,
+    scraping) deja un registro con la acción, el momento y los detalles.
+
+    Attributes:
+        accion (str): Nombre de la operación realizada.
+        fecha (datetime.datetime): Momento en que se realizó.
+        detalles (str): Datos con los que se hizo y su resultado.
+    """
+
+    def __init__(self, id_: int, accion: str, fecha: datetime.datetime,
+                 detalles: str = '') -> None:
+        super().__init__(id_)
+        self.accion = accion
+        self.fecha = fecha
+        self.detalles = detalles
+
+    @property
+    def accion(self) -> str:
+        """str: Nombre de la operación realizada."""
+        return self._accion
+
+    @accion.setter
+    def accion(self, valor: str) -> None:
+        if not valor or not valor.strip():
+            raise ValueError("La acción de la auditoría no puede estar vacía.")
+        self._accion = valor.strip()
+
+    @property
+    def fecha(self) -> datetime.datetime:
+        """datetime.datetime: Momento en que se realizó la operación."""
+        return self._fecha
+
+    @fecha.setter
+    def fecha(self, valor: datetime.datetime) -> None:
+        if not isinstance(valor, datetime.datetime):
+            raise TypeError("fecha debe ser un datetime.")
+        self._fecha = valor
+
+    @property
+    def detalles(self) -> str:
+        """str: Datos de la operación y su resultado."""
+        return self._detalles
+
+    @detalles.setter
+    def detalles(self, valor: Optional[str]) -> None:
+        self._detalles = (valor or '').strip()
+
+    def __str__(self) -> str:
+        return f"[{self.fecha:%Y-%m-%d %H:%M:%S}] {self.accion}"

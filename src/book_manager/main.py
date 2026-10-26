@@ -12,9 +12,10 @@ from typing import Optional
 from sqlalchemy import func, inspect, select
 
 from book_manager.database.connection import ConexionDB
-from book_manager.models.models import LibroModelo
+from book_manager.models.models import LibroModelo, crear_tablas
 from book_manager.preload_data.preload_data import cargar_datos_iniciales
 from book_manager.repositories.repositories import (
+    RepositorioAuditoria,
     RepositorioCotizacionDolar,
     RepositorioEditorial,
     RepositorioGenero,
@@ -26,6 +27,7 @@ from book_manager.repositories.repositories import (
     RepositorioTipoCotizacion,
 )
 from book_manager.services.services import (
+    ServicioAuditoria,
     ServicioComparacionPrecios,
     ServicioCotizacionDolar,
     ServicioCotizador,
@@ -75,6 +77,7 @@ def armar_servicios(conexion: ConexionDB) -> ServiciosLibreria:
     repo_stock = RepositorioStock(conexion)
     repo_cotizacion = RepositorioCotizacionDolar(conexion)
     repo_precio_web = RepositorioPrecioWeb(conexion)
+    repo_auditoria = RepositorioAuditoria(conexion)
 
     generos = ServicioGenero(repo_genero, repo_libro)
     editoriales = ServicioEditorial(repo_editorial, repo_libro)
@@ -88,10 +91,11 @@ def armar_servicios(conexion: ConexionDB) -> ServiciosLibreria:
     cotizador = ServicioCotizador(libros, precios, cotizaciones)
     comparador = ServicioComparacionPrecios(repo_precio_web, libros, cotizador,
                                             tipos_cotizacion)
+    auditoria = ServicioAuditoria(repo_auditoria)
 
     return ServiciosLibreria(generos, editoriales, monedas, tipos_cotizacion,
                              libros, precios, stock, cotizaciones, cotizador,
-                             comparador)
+                             comparador, auditoria)
 
 
 def preparar_servicios(
@@ -110,15 +114,24 @@ def preparar_servicios(
         ServiciosLibreria: Los servicios listos para usar.
     """
     conexion = conexion or ConexionDB()
+    # crea las tablas nuevas (por ejemplo auditoria) si la base es de un
+    # sprint anterior
+    crear_tablas(conexion.engine)
+    migrar = import_default_data or not hay_datos(conexion)
     if import_default_data:
         print('Se migran de nuevo los datos de migrations/csv...')
-        cargar_datos_iniciales(conexion)
-    elif not hay_datos(conexion):
+    elif migrar:
         print('La base está vacía, se migran los datos de migrations/csv...')
-        cargar_datos_iniciales(conexion)
     else:
         print('Se usan los datos que ya están en la base.')
-    return armar_servicios(conexion)
+
+    servicios = armar_servicios(conexion)
+    if migrar:
+        cargar_datos_iniciales(conexion)
+        servicios.auditoria.registrar(
+            'Migracion de datos iniciales',
+            'Se cargaron los datos de migrations/csv en la base.')
+    return servicios
 
 
 def main(import_default_data: bool = False,

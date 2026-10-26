@@ -1,6 +1,14 @@
 # Changelog
 
 ## Sprint 3
+### [Ejercicio 06]
+- Nueva tabla auditoria (AuditoriaModelo) con la acción, la fecha y los detalles de cada operación, con su entidad Auditoria y su RepositorioAuditoria.
+- ServicioAuditoria para registrar operaciones y consultar el historial (todo o los últimos registros). Los registros no se modifican ni se borran desde el sistema.
+- Decorador auditar(accion) en services.py: registra cada llamada con los datos con que se hizo y su resultado. Si la operación falla también se registra, con el error.
+- Quedan auditadas las altas, modificaciones y bajas de todas las entidades, la obtención de cotizaciones por API, la exportación de precios a CSV, las alertas de precios y el reporte en Excel.
+- La migración de los datos iniciales y cada ejecución del scraper (desde el pipeline, con la cantidad de resultados guardados) también quedan registradas.
+- Al iniciar el sistema se crean las tablas que falten, así la tabla auditoria aparece también en una base del sprint anterior.
+
 ### [Ejercicio 05]
 - ServicioComparacionPrecios.exportar_excel genera un reporte .xlsx en reportes/ con las columnas Libro, Precio interno, Precio web, Diferencia y Fecha de extracción, con la fecha y hora en el nombre del archivo.
 - El reporte tiene un título y la fecha de la extracción arriba de la tabla.
