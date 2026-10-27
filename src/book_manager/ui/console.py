@@ -10,11 +10,15 @@ las reglas y avisan con un ValueError cuando algo no cierra.
 from __future__ import annotations
 
 import datetime
+import os
+import subprocess
+import sys
 from collections import Counter
 from functools import reduce, wraps
 from pathlib import Path
 from typing import (
     Callable,
+    cast,
     Dict,
     Iterable,
     Iterator,
@@ -26,6 +30,7 @@ from typing import (
 
 from book_manager.entities.entities import CotizacionDolar, EntidadBase
 from book_manager.services.services import ServiciosLibreria
+from book_manager.entities.entities import Libro,Genero,Editorial,Moneda,TipoCotizacion,Precio
 
 ANCHO = 74
 
@@ -38,6 +43,12 @@ SIN_DATO = '-'
 # archivo por defecto de la exportación de precios (book_manager/exports)
 RUTA_EXPORTACION = (Path(__file__).resolve().parents[3] / 'exports'
                     / 'precios_libros.csv')
+
+# carpeta src, desde donde se ejecuta el scraper en un proceso aparte
+CARPETA_SRC = Path(__file__).resolve().parents[2]
+
+# largo máximo de los detalles en el historial de auditoría
+LARGO_DETALLES = 60
 
 
 def formatear(valor: object) -> str:
@@ -64,6 +75,21 @@ def formatear(valor: object) -> str:
             return valor.isoformat()
         case _:
             return str(valor)
+
+
+def recortar(texto: str, largo: int = LARGO_DETALLES) -> str:
+    """Acorta un texto largo para que entre en una columna de la tabla.
+
+    Args:
+        texto (str): Texto a mostrar.
+        largo (int): Cantidad máxima de caracteres.
+
+    Returns:
+        str: El texto, cortado con '...' si era más largo.
+    """
+    if len(texto) <= largo:
+        return texto
+    return texto[:largo - 3] + '...'
 
 
 def imprimir_titulo(texto: str) -> None:
@@ -341,6 +367,9 @@ class ConsolaLibreria:
             ('Obtener las cotizaciones por API', self._obtener_cotizaciones),
             ('Lista de precios bimonetaria', self._lista_bimonetaria),
             ('Exportar precios a CSV', self._exportar_precios),
+            ('Ejecutar scraping', self._ejecutar_scraping),
+            ('Generar reporte', self._generar_reporte),
+            ('Ver historial de auditoría', self._ver_auditoria),
         ], salida='Salir').ejecutar()
         print('\nHasta luego.')
 
@@ -496,7 +525,7 @@ class ConsolaLibreria:
             ('Id', 'ISBN', 'Título', 'Autor', 'Editorial', 'Género'),
             [(libro.id, libro.isbn, libro.titulo, libro.autor,
               libro.editorial.nombre, libro.genero.nombre)
-             for libro in self._servicios.libros.listar()],
+             for libro in cast(List[Libro], self._servicios.libros.listar())],
         )
 
     @operacion('Nuevo libro')
@@ -514,7 +543,7 @@ class ConsolaLibreria:
 
     @operacion('Modificar libro')
     def _modificar_libro(self) -> None:
-        libro = self._servicios.libros.obtener(self._pedir_libro_id())
+        libro = cast(Libro, self._servicios.libros.obtener(self._pedir_libro_id()))
         print('\n  Con Enter queda el valor que está entre corchetes.')
 
         isbn = leer_texto('ISBN', libro.isbn)
@@ -530,7 +559,7 @@ class ConsolaLibreria:
 
     @operacion('Borrar libro')
     def _baja_libro(self) -> None:
-        libro = self._servicios.libros.obtener(self._pedir_libro_id())
+        libro = cast(Libro, self._servicios.libros.obtener(self._pedir_libro_id()))
         print('\n  Se borran también sus precios y su stock.')
         if not confirmar(f'¿Borrar "{libro.titulo}"?'):
             print('\n  Operación cancelada.')
@@ -547,7 +576,7 @@ class ConsolaLibreria:
         imprimir_tabla(
             ('Id', 'Nombre'),
             [(genero.id, genero.nombre)
-             for genero in self._servicios.generos.listar()],
+             for genero in cast(List[Genero], self._servicios.generos.listar())],
         )
 
     @operacion('Nuevo género')
@@ -558,7 +587,7 @@ class ConsolaLibreria:
     @operacion('Modificar género')
     def _modificar_genero(self) -> None:
         servicio = self._servicios.generos
-        genero = servicio.obtener(self._pedir_id(servicio.listar(), 'género'))
+        genero = cast(Genero, servicio.obtener(self._pedir_id(servicio.listar(), 'género')))
 
         servicio.actualizar(genero.id, leer_texto('Nombre', genero.nombre))
         print('\n  Género actualizado.')
@@ -566,7 +595,7 @@ class ConsolaLibreria:
     @operacion('Borrar género')
     def _baja_genero(self) -> None:
         servicio = self._servicios.generos
-        genero = servicio.obtener(self._pedir_id(servicio.listar(), 'género'))
+        genero = cast(Genero, servicio.obtener(self._pedir_id(servicio.listar(), 'género')))
         if not confirmar(f'¿Borrar "{genero.nombre}"?'):
             print('\n  Operación cancelada.')
             return
@@ -582,7 +611,7 @@ class ConsolaLibreria:
         imprimir_tabla(
             ('Id', 'Nombre', 'Contacto'),
             [(editorial.id, editorial.nombre, editorial.contacto)
-             for editorial in self._servicios.editoriales.listar()],
+             for editorial in cast(List[Editorial], self._servicios.editoriales.listar())],
         )
 
     @operacion('Nueva editorial')
@@ -596,8 +625,8 @@ class ConsolaLibreria:
     @operacion('Modificar editorial')
     def _modificar_editorial(self) -> None:
         servicio = self._servicios.editoriales
-        editorial = servicio.obtener(
-            self._pedir_id(servicio.listar(), 'editorial'))
+        editorial = cast(Editorial, servicio.obtener(
+              self._pedir_id(servicio.listar(), 'editorial')))
 
         nombre = leer_texto('Nombre', editorial.nombre)
         contacto = leer_texto('Contacto', editorial.contacto,
@@ -609,8 +638,8 @@ class ConsolaLibreria:
     @operacion('Borrar editorial')
     def _baja_editorial(self) -> None:
         servicio = self._servicios.editoriales
-        editorial = servicio.obtener(
-            self._pedir_id(servicio.listar(), 'editorial'))
+        editorial = cast(Editorial, servicio.obtener(
+                 self._pedir_id(servicio.listar(), 'editorial')))
         if not confirmar(f'¿Borrar "{editorial.nombre}"?'):
             print('\n  Operación cancelada.')
             return
@@ -626,7 +655,7 @@ class ConsolaLibreria:
         imprimir_tabla(
             ('Id', 'Código', 'Nombre'),
             [(moneda.id, moneda.codigo, moneda.nombre)
-             for moneda in self._servicios.monedas.listar()],
+             for moneda in cast(List[Moneda], self._servicios.monedas.listar())],
         )
 
     @operacion('Nueva moneda')
@@ -640,7 +669,7 @@ class ConsolaLibreria:
     @operacion('Modificar moneda')
     def _modificar_moneda(self) -> None:
         servicio = self._servicios.monedas
-        moneda = servicio.obtener(self._pedir_id(servicio.listar(), 'moneda'))
+        moneda = cast(Moneda, servicio.obtener(self._pedir_id(servicio.listar(), 'moneda')))
 
         codigo = leer_texto('Código', moneda.codigo)
         nombre = leer_texto('Nombre', moneda.nombre)
@@ -651,7 +680,7 @@ class ConsolaLibreria:
     @operacion('Borrar moneda')
     def _baja_moneda(self) -> None:
         servicio = self._servicios.monedas
-        moneda = servicio.obtener(self._pedir_id(servicio.listar(), 'moneda'))
+        moneda = cast(Moneda, servicio.obtener(self._pedir_id(servicio.listar(), 'moneda')))
         if not confirmar(f'¿Borrar "{moneda.codigo}"?'):
             print('\n  Operación cancelada.')
             return
@@ -667,7 +696,7 @@ class ConsolaLibreria:
         imprimir_tabla(
             ('Id', 'Nombre'),
             [(tipo.id, tipo.nombre)
-             for tipo in self._servicios.tipos_cotizacion.listar()],
+             for tipo in cast(List[TipoCotizacion], self._servicios.tipos_cotizacion.listar())],
         )
 
     @operacion('Nuevo tipo de cotización')
@@ -678,7 +707,7 @@ class ConsolaLibreria:
     @operacion('Modificar tipo de cotización')
     def _modificar_tipo(self) -> None:
         servicio = self._servicios.tipos_cotizacion
-        tipo = servicio.obtener(self._pedir_tipo_id())
+        tipo = cast(TipoCotizacion, servicio.obtener(self._pedir_tipo_id()))
 
         servicio.actualizar(tipo.id, leer_texto('Nombre', tipo.nombre))
         print('\n  Tipo actualizado.')
@@ -686,7 +715,7 @@ class ConsolaLibreria:
     @operacion('Borrar tipo de cotización')
     def _baja_tipo(self) -> None:
         servicio = self._servicios.tipos_cotizacion
-        tipo = servicio.obtener(self._pedir_tipo_id())
+        tipo = cast(TipoCotizacion, servicio.obtener(self._pedir_tipo_id()))
         if not confirmar(f'¿Borrar "{tipo.nombre}"?'):
             print('\n  Operación cancelada.')
             return
@@ -703,7 +732,7 @@ class ConsolaLibreria:
             ('Id', 'Libro', 'Moneda', 'Valor'),
             [(precio.id, precio.libro.titulo, precio.moneda.codigo,
               precio.valor)
-             for precio in self._servicios.precios.listar()],
+             for precio in cast(List[Precio], self._servicios.precios.listar())],
         )
 
     @operacion('Nuevo precio')
@@ -719,9 +748,9 @@ class ConsolaLibreria:
     def _modificar_precio(self) -> None:
         servicio = self._servicios.precios
         # la lambda arma el texto de cada opción para que se vea el libro
-        precio = servicio.obtener(self._pedir_id(
-            servicio.listar(), 'precio',
-            lambda item: f'{item.libro.titulo} - {item}'))
+        precio = cast(Precio, servicio.obtener(self._pedir_id(
+                servicio.listar(), 'precio',
+                lambda item: f'{cast(Precio, item).libro.titulo} - {item}')))
 
         servicio.actualizar(precio.id,
                             leer_decimal('Valor', precio.valor, minimo=0))
@@ -730,9 +759,9 @@ class ConsolaLibreria:
     @operacion('Borrar precio')
     def _baja_precio(self) -> None:
         servicio = self._servicios.precios
-        precio = servicio.obtener(self._pedir_id(
-            servicio.listar(), 'precio',
-            lambda item: f'{item.libro.titulo} - {item}'))
+        precio = cast(Precio, servicio.obtener(self._pedir_id(
+                servicio.listar(), 'precio',
+                lambda item: f'{cast(Precio, item).libro.titulo} - {item}')))
         if not confirmar(f'¿Borrar el precio de "{precio.libro.titulo}"?'):
             print('\n  Operación cancelada.')
             return
@@ -951,3 +980,53 @@ class ConsolaLibreria:
         ruta = Path(leer_texto('Archivo de salida', str(RUTA_EXPORTACION)))
         cantidad = self._servicios.cotizador.exportar_precios_csv(ruta)
         print(f'\n  Se exportaron {cantidad} fila(s) a {ruta}.')
+
+    # ------------------------------------------------------------------
+    # scraping, reporte en Excel y auditoría
+    # ------------------------------------------------------------------
+    @operacion('Ejecutar scraping')
+    def _ejecutar_scraping(self) -> None:
+        comparador = self._servicios.comparador
+        # la diferencia se pide antes de cada ejecución (Ejercicio 04)
+        minimo = leer_decimal('Diferencia mínima en ARS para alertar',
+                              minimo=0)
+
+        print('\n  Buscando los libros del catálogo en Cúspide, puede '
+              'tardar unos minutos...')
+        # Scrapy no se puede iniciar dos veces en el mismo proceso, por eso
+        # se lanza en un proceso aparte con el módulo scraper.ejecutar
+        entorno = dict(os.environ)
+        entorno['PYTHONPATH'] = os.pathsep.join(
+            filter(None, (str(CARPETA_SRC), entorno.get('PYTHONPATH'))))
+        proceso = subprocess.run(
+            [sys.executable, '-m', 'book_manager.scraper.ejecutar'],
+            cwd=CARPETA_SRC, env=entorno, capture_output=True, text=True,
+            check=False)
+        if proceso.returncode != 0:
+            ultimas_lineas = proceso.stderr.strip().splitlines()[-10:]
+            print('\n'.join(f'    {linea}' for linea in ultimas_lineas))
+            raise ValueError('El scraper terminó con errores.')
+        print('  Scraping terminado.')
+
+        ruta = comparador.ruta_alertas_por_defecto()
+        cantidad = comparador.exportar_alertas_csv(minimo, ruta)
+        print(f'\n  Se generaron {cantidad} alerta(s) en {ruta}.')
+
+    @operacion('Generar reporte')
+    def _generar_reporte(self) -> None:
+        comparador = self._servicios.comparador
+        ruta = Path(leer_texto('Archivo de salida',
+                               str(comparador.ruta_excel_por_defecto())))
+        cantidad = comparador.exportar_excel(ruta)
+        print(f'\n  Se escribieron {cantidad} libro(s) en {ruta}.')
+
+    @operacion('Historial de auditoría')
+    def _ver_auditoria(self) -> None:
+        cantidad = leer_entero('Cantidad de registros a ver', 20, minimo=1)
+        registros = self._servicios.auditoria.ultimos(cantidad)
+        imprimir_tabla(
+            ('Id', 'Fecha', 'Acción', 'Detalles'),
+            [(registro.id, f'{registro.fecha:%Y-%m-%d %H:%M:%S}',
+              registro.accion, recortar(registro.detalles))
+             for registro in registros],
+        )

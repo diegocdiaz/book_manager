@@ -1,6 +1,13 @@
 # Changelog
 
 ## Sprint 3
+### [Ejercicio 07]
+- Nuevas opciones en el menú principal: Ejecutar scraping, Generar reporte y Ver historial de auditoría.
+- Ejecutar scraping: pide la diferencia mínima en pesos para las alertas, corre el CuspideSpider en un proceso aparte (Scrapy no se puede iniciar dos veces en el mismo proceso) y al terminar genera el CSV de alertas en reportes/.
+- Generar reporte: genera el Excel de comparación de precios con la última extracción del scraper (por defecto en reportes/, con la fecha y hora en el nombre).
+- Ver historial de auditoría: muestra los últimos registros de la auditoría (la cantidad la elige el usuario) con la fecha, la acción y los detalles.
+- Función recortar en ui/console.py para que los detalles largos de la auditoría entren en la tabla.
+
 ### [Ejercicio 06]
 - Nueva tabla auditoria (AuditoriaModelo) con la acción, la fecha y los detalles de cada operación, con su entidad Auditoria y su RepositorioAuditoria.
 - ServicioAuditoria para registrar operaciones y consultar el historial (todo o los últimos registros). Los registros no se modifican ni se borran desde el sistema.
