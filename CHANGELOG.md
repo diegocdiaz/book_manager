@@ -7,6 +7,7 @@
 - Generar reporte: genera el Excel de comparación de precios con la última extracción del scraper (por defecto en reportes/, con la fecha y hora en el nombre).
 - Ver historial de auditoría: muestra los últimos registros de la auditoría (la cantidad la elige el usuario) con la fecha, la acción y los detalles.
 - Función recortar en ui/console.py para que los detalles largos de la auditoría entren en la tabla.
+- Alias de los modelos (GeneroModel, LibroModel, etc.) en models.py, con los nombres que usa el test de la plantilla del notebook.
 
 ### [Ejercicio 06]
 - Nueva tabla auditoria (AuditoriaModelo) con la acción, la fecha y los detalles de cada operación, con su entidad Auditoria y su RepositorioAuditoria.

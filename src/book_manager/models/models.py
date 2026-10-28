@@ -208,3 +208,16 @@ def crear_tablas(engine: Engine) -> None:
     """
     Base.metadata.create_all(engine)
     
+
+
+# Nombres con los que el test de la plantilla del notebook importa los
+# modelos (terminan en Model en lugar de Modelo)
+GeneroModel = GeneroModelo
+EditorialModel = EditorialModelo
+MonedaModel = MonedaModelo
+TipoCotizacionModel = TipoCotizacionModelo
+PrecioModel = PrecioModelo
+LibroModel = LibroModelo
+StockModel = StockModelo
+CotizacionDolarModel = CotizacionDolarModelo
+AuditoriaModel = AuditoriaModelo
